@@ -1,45 +1,32 @@
+use std::collections::BTreeSet;
+use std::collections::HashMap;
+
+#[derive(PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
+struct Coor(u8, u8);
+
+type CoorSet = BTreeSet<Coor>;
+
 pub fn solve_puzzle(start: &str, end: &str) {
-    fn clean_string(s: &str) -> Vec<&str> {
-        // Removes initial lines that are all whitespace
-        // Trim maximum amount of leading whitespace in each line, such that
-        // each line has the same amount of leading whitespace trimmed.
-        // Same for trailing whitespace.
-        let mut leading = 255; // ???????
-        let mut trailing = 255; // Smells like recipe for disaster
-
-        // remove final whitespace-only lines:
-        let lines: Vec<&str> = s
+    fn build_charmap(s: &str) -> HashMap<char, CoorSet> {
+        let enumerated: Vec<(char, Coor)> = s
             .lines()
-            .rev()
-            .skip_while(|l| l.trim().is_empty())
-            .collect();
-        // remove initial whitespace-only lines:
-        let mut lines: Vec<&str> = lines
-            .into_iter()
-            .rev()
-            .skip_while(|l| l.chars().all(|c| c.is_whitespace()))
+            .enumerate()
+            .flat_map(|(y, l)| {
+                l.chars()
+                    .enumerate()
+                    .filter(|x| !x.1.is_whitespace())
+                    .map(move |(x, c)| (c, Coor(x as u8, y as u8)))
+            })
             .collect();
 
-        for line in &lines {
-            let count_leading_whitespace = line.chars().take_while(|c| c.is_whitespace()).count();
-            let count_trailing_whitespace =
-                line.chars().rev().take_while(|c| c.is_whitespace()).count();
-            leading = leading.min(count_leading_whitespace);
-            trailing = trailing.min(count_trailing_whitespace);
+        let mut charmap: HashMap<char, CoorSet> = HashMap::new();
+        for (c, coor) in enumerated {
+            charmap.entry(c).or_insert_with(CoorSet::new).insert(coor);
         }
-        println!("Leading: {}, trailing: {}", leading, trailing);
-
-        // Remove leading and trailing whitespace from each line:
-        for line in &mut lines {
-            *line = &line[leading..(line.len() - trailing)];
-        }
-        lines
+        charmap
     }
-    println!(
-        "{}\n\n{}",
-        clean_string(start).join("\r\n"),
-        clean_string(end).join("\n")
-    );
+
+    println!("{:?}", build_charmap(start));
 }
 
 fn main() {
