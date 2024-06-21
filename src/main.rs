@@ -6,26 +6,25 @@ struct Coor(u8, u8);
 
 type CoorSet = BTreeSet<Coor>;
 
-pub fn solve_puzzle(start: &str, end: &str) {
-    fn build_charmap(s: &str) -> HashMap<char, CoorSet> {
-        let enumerated: Vec<(char, Coor)> = s
-            .lines()
-            .enumerate()
-            .flat_map(|(y, l)| {
-                l.chars()
-                    .enumerate()
-                    .filter(|x| !x.1.is_whitespace())
-                    .map(move |(x, c)| (c, Coor(x as u8, y as u8)))
+fn build_charmap(s: &str) -> HashMap<char, CoorSet> {
+    s.lines()
+        .enumerate()
+        .flat_map(|(y, l)| {
+            l.chars().enumerate().filter_map(move |(x, c)| {
+                if !c.is_whitespace() {
+                    Some((c, Coor(x as u8, y as u8)))
+                } else {
+                    None
+                }
             })
-            .collect();
-
-        let mut charmap: HashMap<char, CoorSet> = HashMap::new();
-        for (c, coor) in enumerated {
+        })
+        .fold(HashMap::new(), |mut charmap, (c, coor)| {
             charmap.entry(c).or_insert_with(CoorSet::new).insert(coor);
-        }
-        charmap
-    }
+            charmap
+        })
+}
 
+pub fn solve_puzzle(start: &str, end: &str) {
     println!("{:?}", build_charmap(start));
 }
 
