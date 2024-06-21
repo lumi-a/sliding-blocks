@@ -8,9 +8,19 @@ struct Coor(CoorComponent, CoorComponent);
 
 type CoorSet = BTreeSet<Coor>;
 
+#[derive(PartialEq, Eq)]
+struct Shape(BTreeSet<Coor>);
+struct Offset(CoorComponent, CoorComponent);
+
 const BOUNDS_CHAR: char = '.';
 
-fn build_charmap(s: &str) -> HashMap<char, CoorSet> {
+fn string_to_charcoorsmap(s: &str) -> HashMap<char, CoorSet> {
+    // TODO: Change type of this to actually return a HashMap<char, (Shape, Offset)>, or something.
+    // Shapekey extraction should be done later, otherwise we'd already have to return
+    // a (Vec<Shape>, Vec<Set<Offset>>) right now, and that's just too abstract nonsense at this point.
+    // Oh, of course then also rename the function, and variables that later call this function
+    // (the current name is horrible)
+
     let mut min_x = CoorComponent::MAX;
     let mut min_y = CoorComponent::MAX;
 
@@ -48,13 +58,17 @@ fn build_charmap(s: &str) -> HashMap<char, CoorSet> {
 }
 
 pub fn solve_puzzle(start: &str, goal: &str) {
-    let start_charmap = build_charmap(start);
-    let goal_charmap = build_charmap(goal);
+    let start_charcoorsmap = string_to_charcoorsmap(start);
+    let goal_charcoorsmap = string_to_charcoorsmap(goal);
 
     // TODO: Handle this gracefully rather than panicking
     assert_eq!(
-        start_charmap.get(&BOUNDS_CHAR).unwrap_or(&CoorSet::new()),
-        goal_charmap.get(&BOUNDS_CHAR).unwrap_or(&CoorSet::new()),
+        start_charcoorsmap
+            .get(&BOUNDS_CHAR)
+            .unwrap_or(&CoorSet::new()),
+        goal_charcoorsmap
+            .get(&BOUNDS_CHAR)
+            .unwrap_or(&CoorSet::new()),
         "The start and goal must have the same bounds."
     );
 }
