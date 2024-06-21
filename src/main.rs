@@ -47,28 +47,33 @@ fn build_charmap(s: &str) -> HashMap<char, CoorSet> {
     charmap
 }
 
-pub fn solve_puzzle(start: &str, end: &str) {
-    println!("{:?}", build_charmap(start));
+pub fn solve_puzzle(start: &str, goal: &str) {
+    let start_charmap = build_charmap(start);
+    let goal_charmap = build_charmap(goal);
+
+    // TODO: Handle this gracefully rather than panicking
+    assert_eq!(
+        start_charmap.get(&BOUNDS_CHAR).unwrap_or(&CoorSet::new()),
+        goal_charmap.get(&BOUNDS_CHAR).unwrap_or(&CoorSet::new()),
+        "The start and goal must have the same bounds."
+    );
 }
 
 fn main() {
     let puzzle = (
-        "
-
-
-    #t#CCvv
-    A.#DFFv
-
-     #.#DDrr
-    #.BEEuu
-    #s#E
-    ",
         "
     #.#D
     B.#DD
     #.#CC
     #.AEE
     #.#EFF
+    ",
+        "
+    #...
+    D....
+    DD...
+    E....
+    E.....
     ",
     );
     solve_puzzle(puzzle.0, puzzle.1);
