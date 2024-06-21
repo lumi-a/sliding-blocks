@@ -21,6 +21,9 @@ fn build_charmap(s: &str) -> HashMap<char, CoorSet> {
             if !c.is_whitespace() {
                 let x = x as CoorComponent;
                 let y = y as CoorComponent;
+                // TODO: Check that x and y fit into the CoorComponent type.
+                // Doing so would mean we'd have to return a Result instead.
+                // Currently, this doesn't even panic, but continues innocently (yet wrongly)
                 min_x = min(min_x, x);
                 min_y = min(min_y, y);
                 temp_coords.push((c, Coor(x, y)));
