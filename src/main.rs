@@ -123,6 +123,8 @@ fn build_nonintersectionkey(
     width: Coor,
     height: Coor,
 ) -> Nonintersectionkey {
+    // Brace yourselves
+
     let mut nik = Nonintersectionkey::new();
     for shape_a in shapekey {
         let mut nik_a: Coortable<Vec<Coortable<bool>>> = Coortable::new();
@@ -161,6 +163,12 @@ fn build_nonintersectionkey(
         nik.push(nik_a);
     }
     nik
+}
+
+fn get_neighboring_blockstates(
+    blockstate: &Blockstate,
+    nonintersectionkey: &Nonintersectionkey,
+) -> Vec<Blockstate> {
 }
 
 fn print_puzzle(
@@ -243,25 +251,29 @@ pub fn solve_puzzle(start: &str, goal: &str) {
     print_puzzle(&bounds, &shapekey, &blockstate, width, height);
 
     let nonintersectionkey = build_nonintersectionkey(&bounds, &shapekey, width, height);
-
-    println!("haha!")
 }
 
 fn main() {
     let puzzle = (
         "
-    abcd
-    efghy
-    ijklm
-    nopqr
-    stuvwx
+      tt
+      tt
+    ......
+    .ppoo.
+     ypog
+     yygg
+      bb
+      ..
     ",
         "
-    #...
-    D....
-    DD...
-    E....
-    E.....
+      ..
+      ..
+    ......
+    ......
+     ....
+     ....
+      ..
+      ..
     ",
     );
     solve_puzzle(puzzle.0, puzzle.1);
