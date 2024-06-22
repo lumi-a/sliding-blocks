@@ -143,8 +143,6 @@ fn print_puzzle(
                 blocks.iter().position(|block| block.contains(&(x, y)));
             match option_block_ix {
                 Some(block_ix) => {
-                    // TODO: Is there some way to uhh promise that this unwrap never fails?
-                    // let block = blocks.get(block_ix).unwrap();
                     let r = ((block_ix + 1) * 7573 % 256) as u8;
                     let g = ((block_ix + 1) * 6841 % 256) as u8;
                     let b = ((block_ix + 1) * 5953 % 256) as u8;
