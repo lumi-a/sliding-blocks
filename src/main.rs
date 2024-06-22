@@ -73,12 +73,16 @@ fn extract_shapekey(
     goal_chartocoors: &CharToCoors,
     width: Coor,
     height: Coor,
-) -> (Bounds, Shapekey, Offsets) {
+) -> (Bounds, Shapekey, Blockstate) {
     let mut shapestooffsets: HashMap<Shape, Vec<Offset>> = HashMap::new();
     // TODO: Handle empty strings gracefully
-    let bounds = (start_chartocoors.remove(&BOUNDS_CHAR).unwrap());
+    // TODO: Also maybe don't use clone, but I'm not into ownership enough to think through how to handle this
+    let bounds: Shape = start_chartocoors.get(&BOUNDS_CHAR).unwrap().clone();
 
     for (c, start_coords) in start_chartocoors.iter() {
+        if c == &BOUNDS_CHAR {
+            continue;
+        }
         // Extract min-x and min-y.
         // Assumes that start_coords is nonempty. TODO: Is that a misassumption?
         let mut min_x = Coor::MAX;
@@ -87,20 +91,22 @@ fn extract_shapekey(
             min_x = min(min_x, coor.0);
             min_y = min(min_y, coor.1);
         }
-        let shape = (start_coords
+        let shape = start_coords
             .iter()
             .map(|coor| (coor.0 - min_x, coor.1 - min_y))
-            .collect(),);
+            .collect();
         shapestooffsets
             .entry(shape)
             .or_insert_with(Vec::new)
             .push((min_x, min_y));
     }
-    let ughy: Vec<Shape> = shapestooffsets.keys().collect();
-    // let shapekey = Shapekey(shapestooffsets.keys().collect());
-    // let offsets = Offsets(shapestooffsets.values().collect());
+    let shapekey: Shapekey = shapestooffsets.keys().map(|shape| shape.clone()).collect();
+    let blockstate: Blockstate = shapestooffsets
+        .values()
+        .map(|offsets| offsets.clone())
+        .collect();
 
-    (bounds, shapekey, offsets)
+    (bounds, shapekey, blockstate)
 }
 
 fn print_puzzle(shapekey: &Shapekey, blockstate: &Blockstate, width: Coor, height: Coor) {}
