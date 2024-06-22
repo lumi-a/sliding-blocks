@@ -1,7 +1,10 @@
 use colored::{self, Colorize};
 use std::cmp::{max, min};
-use std::collections::BTreeSet;
+use std::collections::hash_map::Entry::Occupied;
+use std::collections::hash_map::Entry::Vacant;
 use std::collections::HashMap;
+use std::collections::HashSet;
+use std::collections::{BTreeSet, VecDeque};
 
 // TODO: Perhaps it's better to abstract most of these into structs
 type Coor = u8;
@@ -214,7 +217,7 @@ fn get_neighboring_blockstates(
     */ // for now, just this bad implementation of bfs:
     // TODO: For this, the order of the shapekeys actually affects performance, so
     // we should make sure that larger shapes get sorted first
-    let bfs = |moving_shape_ix: usize,
+    let dfs = |moving_shape_ix: usize,
                moving_offset: Offset,
                trimmed_shape_offsets: &Offsets|
      -> Vec<Offset> {
@@ -309,7 +312,7 @@ fn get_neighboring_blockstates(
         for offset in shape_offsets.iter() {
             let mut trimmed_shape_offsets = shape_offsets.clone();
             trimmed_shape_offsets.remove(offset);
-            for mutated_offset in bfs(shape_ix, *offset, &trimmed_shape_offsets) {
+            for mutated_offset in dfs(shape_ix, *offset, &trimmed_shape_offsets) {
                 let mut mutated_shape_offsets = trimmed_shape_offsets.clone();
                 mutated_shape_offsets.insert(mutated_offset);
                 let mut new_blockstate = blockstate.clone();
@@ -376,6 +379,46 @@ fn print_puzzle(
     println!("{}", OUT_OF_BOUNDS.repeat(width as usize + 2));
 }
 
+fn puzzle_bfs_with_path_reconstruction<F, G>(
+    blockstate: &Blockstate,
+    get_neighbors: F,
+    goal_check: G,
+) -> Option<Vec<Blockstate>>
+where
+    F: Fn(&Blockstate) -> Vec<Blockstate>,
+    G: Fn(&Blockstate) -> bool,
+{
+    let mut queue: VecDeque<Blockstate> = VecDeque::new();
+    // TODO: Better datastructures?
+    // TODO: Definitely not memory efficient, we should store pointers instead
+    let mut seen: HashMap<Blockstate, Option<Blockstate>> = HashMap::new();
+    queue.push_back(blockstate.clone());
+    seen.insert(blockstate.clone(), None);
+    while !queue.is_empty() {
+        let blockstate = queue.pop_front().unwrap();
+        if goal_check(&blockstate) {
+            let mut path: Vec<Blockstate> = vec![blockstate.clone()];
+            let mut curr = blockstate.clone();
+            while let Some(prev) = seen[&curr].clone() {
+                path.push(prev.clone());
+                curr = prev;
+            }
+            path.reverse();
+            return Some(path);
+        }
+        for neighbor in get_neighbors(&blockstate) {
+            match seen.entry(neighbor.clone()) {
+                Occupied(_) => (),
+                Vacant(entry) => {
+                    entry.insert(Some(blockstate.clone()));
+                    queue.push_back(neighbor);
+                }
+            }
+        }
+    }
+    None
+}
+
 pub fn solve_puzzle(start: &str, goal: &str) {
     let (start_chartocoors, width, height) = string_to_chartocoors(start);
     let (goal_chartocoors, goal_width, goal_height) = string_to_chartocoors(goal);
@@ -395,19 +438,39 @@ pub fn solve_puzzle(start: &str, goal: &str) {
     assert_eq!(width, goal_width, "start_width and goal_width don't match. This should never happen, as bounds are already asserted to be the same.");
     assert_eq!(height, goal_height, "start_height and goal_height don't match. This should never happen, as bounds are already asserted to be the same.");
 
-    let (bounds, shapekey, blockstate) =
+    let (bounds, shapekey, start_blockstate) =
         extract_shapekey(&start_chartocoors, &goal_chartocoors, width, height);
 
     // TODO: Remove this
-    print_puzzle(&bounds, &shapekey, &blockstate, width, height);
+    print_puzzle(&bounds, &shapekey, &start_blockstate, width, height);
+    println!();
+    println!();
 
     let nonintersectionkey = build_nonintersectionkey(&bounds, &shapekey, width, height);
 
-    let neighboring_blockstates =
-        get_neighboring_blockstates(&blockstate, &nonintersectionkey, width, height);
-    for neighbor in neighboring_blockstates {
-        print_puzzle(&bounds, &shapekey, &neighbor, width, height);
+    // TODO: delete this
+    let mut big_ix = 0;
+    let mut big_val = shapekey[0].len();
+    for (ix, val) in shapekey.iter().enumerate() {
+        let lenny = val.len();
+        if lenny > big_val {
+            big_ix = ix;
+            big_val = lenny;
+        }
     }
+
+    let path = puzzle_bfs_with_path_reconstruction(
+        &start_blockstate,
+        |blockstate| get_neighboring_blockstates(&blockstate, &nonintersectionkey, width, height),
+        |blockstate| blockstate[big_ix].iter().next().unwrap().1 > 5,
+    )
+    .unwrap();
+    for blockstate in &path {
+        print_puzzle(&bounds, &shapekey, &blockstate, width, height);
+    }
+    println!("{}", path.len());
+
+    // TODO: Print path
 }
 
 fn main() {
@@ -420,6 +483,7 @@ fn main() {
      ypog
      yygg
       bb
+      ..
     ",
         "
       ..
