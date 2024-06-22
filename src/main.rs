@@ -13,9 +13,9 @@ struct Shape(BTreeSet<Coordinates>);
 #[derive(PartialEq, Eq, PartialOrd, Ord, Debug)]
 struct Offset(Coor, Coor);
 
-type Offsets = BTreeSet<Offset>;
 struct Shapekey(Vec<Shape>);
-struct Blockstate(Vec<Offsets>);
+type Offsets = Vec<Offset>;
+struct Blockstate(Vec<Offsets>); // TODO: Perhaps this is better done on the stack, e.g. with https://crates.io/crates/arrayvec
 
 const BOUNDS_CHAR: char = '.';
 
@@ -60,6 +60,8 @@ fn string_to_charcoorsmap(s: &str) -> HashMap<char, CoordinatesSet> {
 
     charmap
 }
+
+fn print_puzzle(shapekey: &Shapekey, blockstate: &Blockstate) {}
 
 pub fn solve_puzzle(start: &str, goal: &str) {
     let start_charcoorsmap = string_to_charcoorsmap(start);
