@@ -140,10 +140,10 @@ fn build_nonintersectionkey(
     let mut nik = Nonintersectionkey::new();
     for shape_a in shapekey {
         let mut nik_a: Coortable<Vec<Coortable<bool>>> = Coortable::new();
-        for ya in 0..height {
-            let mut nik_ay: Vec<Vec<Coortable<bool>>> = Vec::new();
-            for xa in 0..width {
-                let mut nik_ayx: Vec<Coortable<bool>> = Vec::new();
+        for xa in 0..width {
+            let mut nik_ax: Vec<Vec<Coortable<bool>>> = Vec::new();
+            for ya in 0..height {
+                let mut nik_axy: Vec<Coortable<bool>> = Vec::new();
 
                 // TODO: Extract into shift-function
                 let shifted_a: CoordinatesSet =
@@ -151,26 +151,26 @@ fn build_nonintersectionkey(
                 if shifted_a.is_subset(bounds) {
                     // Let the fun begin
                     for shape_b in shapekey {
-                        let mut nik_ayx_b: Coortable<bool> = Coortable::new();
-                        for yb in 0..height {
-                            let mut nik_ayx_by: Vec<bool> = Vec::new();
-                            for xb in 0..width {
+                        let mut nik_axy_b: Coortable<bool> = Coortable::new();
+                        for xb in 0..width {
+                            let mut nik_axy_bx: Vec<bool> = Vec::new();
+                            for yb in 0..height {
                                 // TODO: Extract into shift-function
                                 let shifted_b: CoordinatesSet =
                                     shape_b.iter().map(|(x, y)| (x + xb, y + yb)).collect();
 
-                                let nik_ayx_byx: bool = shifted_b.is_subset(bounds)
+                                let nik_axy_bxy: bool = shifted_b.is_subset(bounds)
                                     && shifted_b.is_disjoint(&shifted_a);
-                                nik_ayx_by.push(nik_ayx_byx);
+                                nik_axy_bx.push(nik_axy_bxy);
                             }
-                            nik_ayx_b.push(nik_ayx_by);
+                            nik_axy_b.push(nik_axy_bx);
                         }
-                        nik_ayx.push(nik_ayx_b);
+                        nik_axy.push(nik_axy_b);
                     }
                 }
-                nik_ay.push(nik_ayx);
+                nik_ax.push(nik_axy);
             }
-            nik_a.push(nik_ay);
+            nik_a.push(nik_ax);
         }
         nik.push(nik_a);
     }
