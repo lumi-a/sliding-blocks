@@ -2,21 +2,20 @@ use std::cmp::{max, min};
 use std::collections::BTreeSet;
 use std::collections::HashMap;
 
+// TODO: Perhaps it's better to abstract most of these into structs
 type Coor = u8;
-#[derive(PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
-struct Coordinates(Coor, Coor);
+type Coordinates = (Coor, Coor);
 
 type CoordinatesSet = BTreeSet<Coordinates>;
 type CharToCoors = HashMap<char, CoordinatesSet>;
 
-#[derive(PartialEq, Eq, Debug)]
-struct Shape(BTreeSet<Coordinates>);
-#[derive(PartialEq, Eq, PartialOrd, Ord, Debug)]
-struct Offset(Coor, Coor);
+type Shape = BTreeSet<Coordinates>;
+type Bounds = Shape;
+type Offset = (Coor, Coor);
 
-struct Shapekey(Vec<Shape>);
+type Shapekey = Vec<Shape>;
 type Offsets = Vec<Offset>;
-struct Blockstate(Vec<Offsets>); // TODO: Perhaps this is better done on the stack, e.g. with https://crates.io/crates/arrayvec
+type Blockstate = Vec<Offsets>; // TODO: Perhaps this is better done on the stack, e.g. with https://crates.io/crates/arrayvec
 
 const BOUNDS_CHAR: char = '.';
 
@@ -45,9 +44,9 @@ fn string_to_chartocoors(s: &str) -> (CharToCoors, Coor, Coor) {
                 min_y = min(min_y, y);
                 max_x = max(max_x, x);
                 max_y = max(max_y, y);
-                temp_coords.push((c, Coordinates(x, y)));
+                temp_coords.push((c, (x, y)));
                 if c != BOUNDS_CHAR {
-                    temp_coords.push((BOUNDS_CHAR, Coordinates(x, y)));
+                    temp_coords.push((BOUNDS_CHAR, (x, y)));
                 }
             }
         }
@@ -56,10 +55,10 @@ fn string_to_chartocoors(s: &str) -> (CharToCoors, Coor, Coor) {
     let width = max_x - min_x + 1;
     let height = max_y - min_y + 1;
 
-    let shift = Coordinates(min_x, min_y);
+    let shift = (min_x, min_y);
     let mut chartocoors: CharToCoors = CharToCoors::new();
     for (c, coor) in temp_coords {
-        let shifted_coor = Coordinates(coor.0 - shift.0, coor.1 - shift.1);
+        let shifted_coor = (coor.0 - shift.0, coor.1 - shift.1);
         chartocoors
             .entry(c)
             .or_insert_with(CoordinatesSet::new)
@@ -74,12 +73,34 @@ fn extract_shapekey(
     goal_chartocoors: &CharToCoors,
     width: Coor,
     height: Coor,
-) -> (Bounds, Shapekey) {
+) -> (Bounds, Shapekey, Offsets) {
     let mut shapestooffsets: HashMap<Shape, Vec<Offset>> = HashMap::new();
     // TODO: Handle empty strings gracefully
-    let bounds = start_chartocoors.remove(&BOUNDS_CHAR).unwrap();
+    let bounds = (start_chartocoors.remove(&BOUNDS_CHAR).unwrap());
 
     for (c, start_coords) in start_chartocoors.iter() {
+        // Extract min-x and min-y.
+        // Assumes that start_coords is nonempty. TODO: Is that a misassumption?
+        let mut min_x = Coor::MAX;
+        let mut min_y = Coor::MAX;
+        for coor in start_coords {
+            min_x = min(min_x, coor.0);
+            min_y = min(min_y, coor.1);
+        }
+        let shape = (start_coords
+            .iter()
+            .map(|coor| (coor.0 - min_x, coor.1 - min_y))
+            .collect(),);
+        shapestooffsets
+            .entry(shape)
+            .or_insert_with(Vec::new)
+            .push((min_x, min_y));
+    }
+    let ughy: Vec<Shape> = shapestooffsets.keys().collect();
+    // let shapekey = Shapekey(shapestooffsets.keys().collect());
+    // let offsets = Offsets(shapestooffsets.values().collect());
+
+    (bounds, shapekey, offsets)
 }
 
 fn print_puzzle(shapekey: &Shapekey, blockstate: &Blockstate, width: Coor, height: Coor) {}
