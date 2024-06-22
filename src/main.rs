@@ -413,14 +413,13 @@ pub fn solve_puzzle(start: &str, goal: &str) {
 fn main() {
     let puzzle = (
         "
-      AA
-      AA
-    .####.
-    .####.
-     ....
-     ....
-      ..
-      ..
+      tt
+      tt
+    ......
+    .ppoo.
+     ypog
+     yygg
+      bb
     ",
         "
       ..
