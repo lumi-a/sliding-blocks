@@ -23,7 +23,8 @@ fn intersect_coortables(a: &Coortable<bool>, b: &Coortable<bool>) -> Coortable<b
     a.iter()
         .zip(b)
         .map(|(row_a, row_b)| {
-            row_a.iter()
+            row_a
+                .iter()
                 .zip(row_b)
                 .map(|(&elem_a, &elem_b)| elem_a && elem_b)
                 .collect()
@@ -180,19 +181,21 @@ fn build_nonintersectionkey(
 fn get_neighboring_blockstates(
     blockstate: &Blockstate,
     nonintersectionkey: &Nonintersectionkey,
-    width: Coor, height: Coor
+    width: Coor,
+    height: Coor,
 ) -> Vec<Blockstate> {
     // TODO: Create current nonintersections using dynamic programming:
     // In the end,
     //  `left_nonintersection[shape][i] ∩ right_nonintersection[shape][?-i]
-    //   ∩ (nik[shape][x1][y1][shape]∩…∩(nik[shape][x(i-1)][y(i-1)][shape]))
-    //   ∩ (nik[shape][x(i+1)][y(i+1)][shape]∩…∩(nik[shape][x?][y?][shape]))
-    //  `
+    //   ∩ [(nik[shape][x1][y1][shape]∩…∩(nik[shape][x(i-1)][y(i-1)][shape]))
+    //     ∩ (nik[shape][x(i+1)][y(i+1)][shape]∩…∩(nik[shape][x?][y?][shape]))
+    //   ]`
     // will describe exactly the positions that block `i` of shape `shape` is allowed to move to.
     // The latter ugly thing can also be implemented using dynamic programming.
     // TODO: Maybe this is faster using Bitvecs rather than Coortable<Bool>
     // TODO: Capacity can be calculated ahead of time.
-    // TODO: This not only assumes non-empty bounds, but also that at least one block exists (or does it?)
+    // TODO: This not only assumes non-empty bounds, but also that at least TWO blocks exist!
+    //  (otherwise we don't get to snack on the free bounds-check)
     /*
     let all_coors : Coortable<bool> = vec![vec![true; height as usize]; width as usize];
     let mut left_nonintersection: Vec<Coortable<bool>> = vec![all_coors.clone()];
@@ -208,16 +211,110 @@ fn get_neighboring_blockstates(
             )
         }
     }
-    */
-    
+    */ // for now, just this bad implementation of bfs:
+    // TODO: For this, the order of the shapekeys actually affects performance, so
+    // we should make sure that larger shapes get sorted first
+    let bfs = |moving_shape_ix: usize,
+               moving_offset: Offset,
+               trimmed_shape_offsets: &Offsets|
+     -> Vec<Offset> {
+        let is_legal = |offsetty: Offset| -> bool {
+            for (shape_ix, shape_offsets) in blockstate.iter().enumerate() {
+                if shape_ix == moving_shape_ix {
+                    continue;
+                }
+                for offset in shape_offsets {
+                    // TODO: How bad are these "as usize" conversions?
+                    // If they're really bad, I might just end up using usize as the type for Coor
+                    if !nonintersectionkey[shape_ix][offset.0 as usize][offset.1 as usize]
+                        [moving_shape_ix][offsetty.0 as usize][offsetty.1 as usize]
+                    {
+                        return false;
+                    }
+                }
+            }
+            for offset in trimmed_shape_offsets {
+                if !nonintersectionkey[moving_shape_ix][offset.0 as usize][offset.1 as usize]
+                    [moving_shape_ix][offsetty.0 as usize][offsetty.1 as usize]
+                {
+                    return false;
+                }
+            }
+            true
+        };
+        let mut legal_offsets: Vec<Offset> = Vec::new();
+        let mut seen_offsets: BTreeSet<Offset> = BTreeSet::new();
+        seen_offsets.insert(moving_offset);
+        let mut stack: Vec<Offset> = vec![moving_offset];
+        while !stack.is_empty() {
+            let offset = stack.pop().unwrap();
+
+            // TODO: Maybe this can be made faster by not going back in
+            // the direction we just came from
+
+            // TODO: This is AWFUL code.
+            // And no, we can't just extract the array into match-arms and for-loop
+            // over the match-result, because arrays of different length are
+            // different types
+            // Should we extend the intersection-vector to reach one more cell? Hmm
+            let inserty = |new_offset: Offset| {
+                if new_offset.0 < width
+                    && new_offset.1 < height
+                    && seen_offsets.insert(new_offset)
+                    && is_legal(new_offset)
+                {
+                    legal_offsets.push(new_offset);
+                    stack.push(new_offset);
+                }
+            };
+            // TODO: I hate this
+            if offset.0 > 0 {
+                if offset.1 > 0 {
+                    [
+                        (offset.0, offset.1 + 1),
+                        (offset.0 + 1, offset.1),
+                        (offset.0, offset.1 - 1),
+                        (offset.0 - 1, offset.1),
+                    ]
+                    .map(inserty);
+                } else {
+                    [
+                        (offset.0, offset.1 + 1),
+                        (offset.0 + 1, offset.1),
+                        (offset.0 - 1, offset.1),
+                    ]
+                    .map(inserty);
+                }
+            } else {
+                if offset.1 > 0 {
+                    [
+                        (offset.0, offset.1 + 1),
+                        (offset.0 + 1, offset.1),
+                        (offset.0, offset.1 - 1),
+                    ]
+                    .map(inserty);
+                } else {
+                    [(offset.0, offset.1 + 1), (offset.0 + 1, offset.1)].map(inserty);
+                }
+            }
+        }
+
+        legal_offsets
+    };
+
+    // It's okay to gather all these into a vector rather than a set,
+    // because all neighbors WILL be unique.
     let mut neighboring_blockstates: Vec<Blockstate> = Vec::new();
     for (shape_ix, shape_offsets) in blockstate.iter().enumerate() {
-
-        for offset in shape_offsets.iter().enumerate() {
-            let mutated_offsets = mutate(offset);
-            for mutated_offset in mutated_offsets {
-                let mutated_shape_offsets = // replace shape_offsets[ix] with mutated_offset
-                neighboring_blockstates.push(mutated_shape_offsets)
+        for offset in shape_offsets.iter() {
+            let mut trimmed_shape_offsets = shape_offsets.clone();
+            trimmed_shape_offsets.remove(offset);
+            for mutated_offset in bfs(shape_ix, *offset, &trimmed_shape_offsets) {
+                let mut mutated_shape_offsets = trimmed_shape_offsets.clone();
+                mutated_shape_offsets.insert(mutated_offset);
+                let mut new_blockstate = blockstate.clone();
+                new_blockstate[shape_ix] = mutated_shape_offsets;
+                neighboring_blockstates.push(new_blockstate);
             }
         }
     }
@@ -231,6 +328,9 @@ fn print_puzzle(
     width: Coor,
     height: Coor,
 ) {
+    // TODO: Colors aren't the best choice here, because colors WILL change when
+    //  blocks move, giving the illusion of some blocks having changed shapes
+
     // Create vec of blocks:
     let mut blocks: Vec<CoordinatesSet> = Vec::new();
     for (shape, offsets) in shapekey.iter().zip(blockstate.iter()) {
@@ -295,8 +395,6 @@ pub fn solve_puzzle(start: &str, goal: &str) {
     assert_eq!(width, goal_width, "start_width and goal_width don't match. This should never happen, as bounds are already asserted to be the same.");
     assert_eq!(height, goal_height, "start_height and goal_height don't match. This should never happen, as bounds are already asserted to be the same.");
 
-    println!("{},{}", width, height);
-
     let (bounds, shapekey, blockstate) =
         extract_shapekey(&start_chartocoors, &goal_chartocoors, width, height);
 
@@ -304,18 +402,24 @@ pub fn solve_puzzle(start: &str, goal: &str) {
     print_puzzle(&bounds, &shapekey, &blockstate, width, height);
 
     let nonintersectionkey = build_nonintersectionkey(&bounds, &shapekey, width, height);
+
+    let neighboring_blockstates =
+        get_neighboring_blockstates(&blockstate, &nonintersectionkey, width, height);
+    for neighbor in neighboring_blockstates {
+        print_puzzle(&bounds, &shapekey, &neighbor, width, height);
+    }
 }
 
 fn main() {
     let puzzle = (
         "
-      tt
-      tt
-    ......
-    .ppoo.
-     ypog
-     yygg
-      bb
+      AA
+      AA
+    .####.
+    .####.
+     ....
+     ....
+      ..
       ..
     ",
         "
