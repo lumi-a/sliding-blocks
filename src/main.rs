@@ -36,6 +36,8 @@ fn string_to_charcoorsmap(s: &str) -> HashMap<char, CoordinatesSet> {
                 // TODO: Check that x and y fit into the Coor type.
                 // Doing so would mean we'd have to return a Result instead.
                 // Currently, this doesn't even panic, but continues innocently (yet wrongly)
+                // TODO: Then also let x, y be usize here, and only later convert
+                // them to Coor after subtraction
                 min_x = min(min_x, x);
                 min_y = min(min_y, y);
                 temp_coords.push((c, Coordinates(x, y)));
