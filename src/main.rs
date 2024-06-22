@@ -1,4 +1,4 @@
-use std::cmp::min;
+use std::cmp::{max, min};
 use std::collections::BTreeSet;
 use std::collections::HashMap;
 
@@ -7,6 +7,7 @@ type Coor = u8;
 struct Coordinates(Coor, Coor);
 
 type CoordinatesSet = BTreeSet<Coordinates>;
+type CharToCoors = HashMap<char, CoordinatesSet>;
 
 #[derive(PartialEq, Eq, Debug)]
 struct Shape(BTreeSet<Coordinates>);
@@ -19,12 +20,14 @@ struct Blockstate(Vec<Offsets>); // TODO: Perhaps this is better done on the sta
 
 const BOUNDS_CHAR: char = '.';
 
-fn string_to_charcoorsmap(s: &str) -> HashMap<char, CoordinatesSet> {
+fn string_to_chartocoors(s: &str) -> (CharToCoors, Coor, Coor) {
     // TODO: Rename the function, and variables that later call this function
     // (the current name is horrible)
 
     let mut min_x = Coor::MAX;
     let mut min_y = Coor::MAX;
+    let mut max_x = Coor::MIN;
+    let mut max_y = Coor::MIN;
 
     let mut temp_coords = Vec::new();
 
@@ -40,6 +43,8 @@ fn string_to_charcoorsmap(s: &str) -> HashMap<char, CoordinatesSet> {
                 // them to Coor after subtraction
                 min_x = min(min_x, x);
                 min_y = min(min_y, y);
+                max_x = max(max_x, x);
+                max_y = max(max_y, y);
                 temp_coords.push((c, Coordinates(x, y)));
                 if c != BOUNDS_CHAR {
                     temp_coords.push((BOUNDS_CHAR, Coordinates(x, y)));
@@ -47,36 +52,56 @@ fn string_to_charcoorsmap(s: &str) -> HashMap<char, CoordinatesSet> {
             }
         }
     }
+    // TODO: Doesn't handle the case where the puzzle is empty
+    let width = max_x - min_x + 1;
+    let height = max_y - min_y + 1;
 
     let shift = Coordinates(min_x, min_y);
-    let mut charmap: HashMap<char, CoordinatesSet> = HashMap::new();
+    let mut chartocoors: CharToCoors = CharToCoors::new();
     for (c, coor) in temp_coords {
         let shifted_coor = Coordinates(coor.0 - shift.0, coor.1 - shift.1);
-        charmap
+        chartocoors
             .entry(c)
             .or_insert_with(CoordinatesSet::new)
             .insert(shifted_coor);
     }
 
-    charmap
+    (chartocoors, width, height)
 }
 
-fn print_puzzle(shapekey: &Shapekey, blockstate: &Blockstate) {}
+fn extract_shapekey(
+    start_chartocoors: &CharToCoors,
+    goal_chartocoors: &CharToCoors,
+    width: Coor,
+    height: Coor,
+) -> (Bounds, Shapekey) {
+    let mut shapestooffsets: HashMap<Shape, Vec<Offset>> = HashMap::new();
+    // TODO: Handle empty strings gracefully
+    let bounds = start_chartocoors.remove(&BOUNDS_CHAR).unwrap();
+
+    for (c, start_coords) in start_chartocoors.iter() {
+}
+
+fn print_puzzle(shapekey: &Shapekey, blockstate: &Blockstate, width: Coor, height: Coor) {}
 
 pub fn solve_puzzle(start: &str, goal: &str) {
-    let start_charcoorsmap = string_to_charcoorsmap(start);
-    let goal_charcoorsmap = string_to_charcoorsmap(goal);
+    let (start_chartocoors, width, height) = string_to_chartocoors(start);
+    let (goal_chartocoors, goal_width, goal_height) = string_to_chartocoors(goal);
 
     // TODO: Handle this gracefully rather than panicking
     assert_eq!(
-        start_charcoorsmap
+        start_chartocoors
             .get(&BOUNDS_CHAR)
             .unwrap_or(&CoordinatesSet::new()),
-        goal_charcoorsmap
+        goal_chartocoors
             .get(&BOUNDS_CHAR)
             .unwrap_or(&CoordinatesSet::new()),
         "The start and goal must have the same bounds."
     );
+
+    // TODO: Handle this gracefully rather than panicking
+    assert_eq!(width, goal_width, "start_width and goal_width don't match. This should never happen, as bounds are already asserted to be the same.");
+    assert_eq!(height, goal_height, "start_height and goal_height don't match. This should never happen, as bounds are already asserted to be the same.");
 }
 
 fn main() {
