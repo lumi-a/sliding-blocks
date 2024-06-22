@@ -17,6 +17,13 @@ type Offset = (Coor, Coor);
 type Shapekey = Vec<Shape>;
 type Offsets = Vec<Offset>;
 type Blockstate = Vec<Offsets>; // TODO: Perhaps this is better done on the stack, e.g. with https://crates.io/crates/arrayvec
+type Coortable<T> = Vec<Vec<T>>;
+
+// Nonintersectionkey[ShapeA][CoordinatesA][ShapeB][CoordinatesB] == true iff:
+//   (ShapeA offset by CoordinatesA) ∩ (ShapeB offset by CoordinatesB) == ∅.
+// To save on memory, we always assume that (ShapeA offset by CoordinatesA) is in bounds.
+// This assumption will be satisfied when using the Nonintersectionkey in the algorithm.
+type Nonintersectionkey = Vec<Coortable<Vec<Coortable<bool>>>>;
 
 const BOUNDS_CHAR: char = '.';
 
@@ -110,6 +117,52 @@ fn extract_shapekey(
     (bounds, shapekey, blockstate)
 }
 
+fn build_nonintersectionkey(
+    bounds: &Bounds,
+    shapekey: &Shapekey,
+    width: Coor,
+    height: Coor,
+) -> Nonintersectionkey {
+    let mut nik = Nonintersectionkey::new();
+    for shape_a in shapekey {
+        let mut nik_a: Coortable<Vec<Coortable<bool>>> = Coortable::new();
+        for ya in 0..height {
+            let mut nik_ay: Vec<Vec<Coortable<bool>>> = Vec::new();
+            for xa in 0..width {
+                let mut nik_ayx: Vec<Coortable<bool>> = Vec::new();
+
+                // TODO: Extract into shift-function
+                let shifted_a: CoordinatesSet =
+                    shape_a.iter().map(|(x, y)| (x + xa, y + ya)).collect();
+                if shifted_a.is_subset(bounds) {
+                    // Let the fun begin
+                    for shape_b in shapekey {
+                        let mut nik_ayx_b: Coortable<bool> = Coortable::new();
+                        for yb in 0..height {
+                            let mut nik_ayx_by: Vec<bool> = Vec::new();
+                            for xb in 0..width {
+                                // TODO: Extract into shift-function
+                                let shifted_b: CoordinatesSet =
+                                    shape_b.iter().map(|(x, y)| (x + xb, y + yb)).collect();
+
+                                let nik_ayx_byx: bool = shifted_b.is_subset(bounds)
+                                    && shifted_b.is_disjoint(&shifted_a);
+                                nik_ayx_by.push(nik_ayx_byx);
+                            }
+                            nik_ayx_b.push(nik_ayx_by);
+                        }
+                        nik_ayx.push(nik_ayx_b);
+                    }
+                }
+                nik_ay.push(nik_ayx);
+            }
+            nik_a.push(nik_ay);
+        }
+        nik.push(nik_a);
+    }
+    nik
+}
+
 fn print_puzzle(
     bounds: &Bounds,
     shapekey: &Shapekey,
@@ -185,7 +238,13 @@ pub fn solve_puzzle(start: &str, goal: &str) {
 
     let (bounds, shapekey, blockstate) =
         extract_shapekey(&start_chartocoors, &goal_chartocoors, width, height);
+
+    // TODO: Remove this
     print_puzzle(&bounds, &shapekey, &blockstate, width, height);
+
+    let nonintersectionkey = build_nonintersectionkey(&bounds, &shapekey, width, height);
+
+    println!("haha!")
 }
 
 fn main() {
