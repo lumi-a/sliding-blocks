@@ -169,6 +169,17 @@ fn get_neighboring_blockstates(
     blockstate: &Blockstate,
     nonintersectionkey: &Nonintersectionkey,
 ) -> Vec<Blockstate> {
+    let mut neighboring_blockstates: Vec<Blockstate> = Vec::new();
+    for shape_offsets in blockstate {
+        for (ix, offset) in shape_offsets.iter().enumerate() {
+            let mutated_offsets = mutate(offset);
+            for mutated_offset in mutated_offsets {
+                let mutated_shape_offsets = // replace shape_offsets[ix] with mutated_offset
+                neighboring_blockstates.push(mutated_shape_offsets)
+            }
+        }
+    }
+    neighboring_blockstates
 }
 
 fn print_puzzle(
