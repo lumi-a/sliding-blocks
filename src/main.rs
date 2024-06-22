@@ -19,6 +19,18 @@ type Offsets = BTreeSet<Offset>;
 type Blockstate = Vec<Offsets>; // TODO: Perhaps this is better done on the stack, e.g. with https://crates.io/crates/arrayvec
 type Coortable<T> = Vec<Vec<T>>;
 
+fn intersect_coortables(a: &Coortable<bool>, b: &Coortable<bool>) -> Coortable<bool> {
+    a.iter()
+        .zip(b)
+        .map(|(row_a, row_b)| {
+            row_a.iter()
+                .zip(row_b)
+                .map(|(&elem_a, &elem_b)| elem_a && elem_b)
+                .collect()
+        })
+        .collect()
+}
+
 // Nonintersectionkey[ShapeA][CoordinatesA][ShapeB][CoordinatesB] == true iff:
 //   (ShapeA offset by CoordinatesA) ∩ (ShapeB offset by CoordinatesB) == ∅.
 // To save on memory, we always assume that (ShapeA offset by CoordinatesA) is in bounds.
@@ -168,10 +180,33 @@ fn build_nonintersectionkey(
 fn get_neighboring_blockstates(
     blockstate: &Blockstate,
     nonintersectionkey: &Nonintersectionkey,
+    width: Coor, height: Coor
 ) -> Vec<Blockstate> {
+    // Create current nonintersections using dynamic programming:
+    // In the end, left_nonintersection[i] ∩ right_nonintersection[?-i] will describe
+    // exactly the positions that block i is allowed to move to.
+    // TODO: Maybe this is faster using Bitvecs rather than Coortable<Bool>
+    // TODO: Capacity can be calculated ahead of time.
+    // TODO: This not only assumes non-empty bounds, but also that at least one block exists (or does it?)
+    let all_coors : Coortable<bool> = vec![vec![true; height as usize]; width as usize];
+    let mut left_nonintersection: Vec<Coortable<bool>> = vec![all_coors.clone()];
+    let mut right_nonintersection: Vec<Coortable<bool>> = vec![all_coors.clone()];
+    for (shape_ix, shape_offsets) in blockstate.iter().enumerate() {
+        let nik_shape = &nonintersectionkey[shape_ix];
+        for (x,y) in shape_offsets {
+            let new_coortable = intersect_coortables(
+                left_nonintersection.last().unwrap(), nik_elem
+            );
+            left_nonintersection.push(
+                new_coortable
+            )
+        }
+    }
+    
     let mut neighboring_blockstates: Vec<Blockstate> = Vec::new();
-    for shape_offsets in blockstate {
-        for (ix, offset) in shape_offsets.iter().enumerate() {
+    for (shape_ix, shape_offsets) in blockstate.iter().enumerate() {
+
+        for offset in shape_offsets.iter().enumerate() {
             let mutated_offsets = mutate(offset);
             for mutated_offset in mutated_offsets {
                 let mutated_shape_offsets = // replace shape_offsets[ix] with mutated_offset
