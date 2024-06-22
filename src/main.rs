@@ -448,6 +448,9 @@ pub fn solve_puzzle(start: &str, goal: &str) {
 
     let nonintersectionkey = build_nonintersectionkey(&bounds, &shapekey, width, height);
 
+    // TODO: Implement actual goal conditions
+    // TODO: Implement A*
+    // TODO: Add tests
     // TODO: delete this
     let mut big_ix = 0;
     let mut big_val = shapekey[0].len();
