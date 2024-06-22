@@ -182,12 +182,18 @@ fn get_neighboring_blockstates(
     nonintersectionkey: &Nonintersectionkey,
     width: Coor, height: Coor
 ) -> Vec<Blockstate> {
-    // Create current nonintersections using dynamic programming:
-    // In the end, left_nonintersection[i] ∩ right_nonintersection[?-i] will describe
-    // exactly the positions that block i is allowed to move to.
+    // TODO: Create current nonintersections using dynamic programming:
+    // In the end,
+    //  `left_nonintersection[shape][i] ∩ right_nonintersection[shape][?-i]
+    //   ∩ (nik[shape][x1][y1][shape]∩…∩(nik[shape][x(i-1)][y(i-1)][shape]))
+    //   ∩ (nik[shape][x(i+1)][y(i+1)][shape]∩…∩(nik[shape][x?][y?][shape]))
+    //  `
+    // will describe exactly the positions that block `i` of shape `shape` is allowed to move to.
+    // The latter ugly thing can also be implemented using dynamic programming.
     // TODO: Maybe this is faster using Bitvecs rather than Coortable<Bool>
     // TODO: Capacity can be calculated ahead of time.
     // TODO: This not only assumes non-empty bounds, but also that at least one block exists (or does it?)
+    /*
     let all_coors : Coortable<bool> = vec![vec![true; height as usize]; width as usize];
     let mut left_nonintersection: Vec<Coortable<bool>> = vec![all_coors.clone()];
     let mut right_nonintersection: Vec<Coortable<bool>> = vec![all_coors.clone()];
@@ -202,6 +208,7 @@ fn get_neighboring_blockstates(
             )
         }
     }
+    */
     
     let mut neighboring_blockstates: Vec<Blockstate> = Vec::new();
     for (shape_ix, shape_offsets) in blockstate.iter().enumerate() {
