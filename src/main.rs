@@ -8,13 +8,18 @@ struct Coordinates(Coor, Coor);
 
 type CoordinatesSet = BTreeSet<Coordinates>;
 
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Debug)]
 struct Shape(BTreeSet<Coordinates>);
+#[derive(PartialEq, Eq, PartialOrd, Ord, Debug)]
 struct Offset(Coor, Coor);
+
+type Offsets = BTreeSet<Offset>;
+struct Shapekey(Vec<Shape>);
+struct Blockstate(Vec<Offsets>);
 
 const BOUNDS_CHAR: char = '.';
 
-fn string_to_offset_shapes(s: &str) -> Vec<(Offset, Shape)> {
+fn string_to_offsetshapes(s: &str) -> Vec<(Offset, Shape)> {
     let mut global_min_x = Coor::MAX;
     let mut global_min_y = Coor::MAX;
 
@@ -40,6 +45,8 @@ fn string_to_offset_shapes(s: &str) -> Vec<(Offset, Shape)> {
                 // TODO: Check that x and y fit into the CoorComponent type.
                 // Doing so would mean we'd have to return a Result instead.
                 // Currently, this doesn't even panic, but continues innocently (yet wrongly)
+                // TODO: Then also let x, y be usize here, and only later convert
+                // them to Coor after subtraction
                 let x = x as Coor;
                 let y = y as Coor;
                 global_min_x = min(global_min_x, x);
@@ -70,9 +77,11 @@ fn string_to_offset_shapes(s: &str) -> Vec<(Offset, Shape)> {
 }
 
 pub fn solve_puzzle(start: &str, goal: &str) {
-    let start_offsetshapes = string_to_offset_shapes(start);
-    let goal_offsetshapes = string_to_offset_shapes(goal);
+    let start_offsetshapes = string_to_offsetshapes(start);
+    let goal_offsetshapes = string_to_offsetshapes(goal);
     // TODO: Maybe check that start and goal have the same bounds?
+
+    println!("{start_offsetshapes:?} {goal_offsetshapes:?}");
 }
 
 fn main() {
