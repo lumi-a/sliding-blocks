@@ -191,11 +191,11 @@ pub fn solve_puzzle(start: &str, goal: &str) {
 fn main() {
     let puzzle = (
         "
-    #.#D
-    B.#DD
-    #.#CC
-    #.A.E
-    #.#EFF
+    abcd
+    efghy
+    ijklm
+    nopqr
+    stuvwx
     ",
         "
     #...
