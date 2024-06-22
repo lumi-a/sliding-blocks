@@ -109,7 +109,46 @@ fn extract_shapekey(
     (bounds, shapekey, blockstate)
 }
 
-fn print_puzzle(shapekey: &Shapekey, blockstate: &Blockstate, width: Coor, height: Coor) {}
+fn print_puzzle(
+    bounds: &Bounds,
+    shapekey: &Shapekey,
+    blockstate: &Blockstate,
+    width: Coor,
+    height: Coor,
+) {
+    // Create vec of blocks:
+    let mut blocks: Vec<CoordinatesSet> = Vec::new();
+    for (shape, offsets) in shapekey.iter().zip(blockstate.iter()) {
+        for offset in offsets {
+            let block: CoordinatesSet = shape
+                .iter()
+                .map(|coor| (coor.0 + offset.0, coor.1 + offset.1))
+                .collect();
+            blocks.push(block);
+        }
+    }
+
+    for y in 0..=width {
+        for x in 0..=height {
+            // Find block that contains (x, y)
+            let option_block: Option<&CoordinatesSet> =
+                blocks.iter().find(|block| block.contains(&(x, y)));
+            match option_block {
+                Some(block) => {
+                    print!("#");
+                }
+                None => {
+                    if bounds.contains(&(x, y)) {
+                        print!("{}", BOUNDS_CHAR);
+                    } else {
+                        print!(" ");
+                    }
+                }
+            }
+        }
+        println!();
+    }
+}
 
 pub fn solve_puzzle(start: &str, goal: &str) {
     let (start_chartocoors, width, height) = string_to_chartocoors(start);
@@ -129,6 +168,10 @@ pub fn solve_puzzle(start: &str, goal: &str) {
     // TODO: Handle this gracefully rather than panicking
     assert_eq!(width, goal_width, "start_width and goal_width don't match. This should never happen, as bounds are already asserted to be the same.");
     assert_eq!(height, goal_height, "start_height and goal_height don't match. This should never happen, as bounds are already asserted to be the same.");
+
+    let (bounds, shapekey, blockstate) =
+        extract_shapekey(&start_chartocoors, &goal_chartocoors, width, height);
+    print_puzzle(&bounds, &shapekey, &blockstate, width, height);
 }
 
 fn main() {
@@ -137,7 +180,7 @@ fn main() {
     #.#D
     B.#DD
     #.#CC
-    #.AEE
+    #.A.E
     #.#EFF
     ",
         "
