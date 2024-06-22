@@ -2,75 +2,77 @@ use std::cmp::min;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
 
-type CoorComponent = u8;
+type Coor = u8;
 #[derive(PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
-struct Coor(CoorComponent, CoorComponent);
+struct Coordinates(Coor, Coor);
 
-type CoorSet = BTreeSet<Coor>;
+type CoordinatesSet = BTreeSet<Coordinates>;
 
 #[derive(PartialEq, Eq)]
-struct Shape(BTreeSet<Coor>);
-struct Offset(CoorComponent, CoorComponent);
+struct Shape(BTreeSet<Coordinates>);
+struct Offset(Coor, Coor);
 
 const BOUNDS_CHAR: char = '.';
 
-fn string_to_charcoorsmap(s: &str) -> HashMap<char, CoorSet> {
-    // TODO: Change type of this to actually return a HashMap<char, (Shape, Offset)>, or something.
-    // Shapekey extraction should be done later, otherwise we'd already have to return
-    // a (Vec<Shape>, Vec<Set<Offset>>) right now, and that's just too abstract nonsense at this point.
-    // Oh, of course then also rename the function, and variables that later call this function
-    // (the current name is horrible)
+fn string_to_offset_shapes(s: &str) -> Vec<(Offset, Shape)> {
+    let mut global_min_x = Coor::MAX;
+    let mut global_min_y = Coor::MAX;
 
-    let mut min_x = CoorComponent::MAX;
-    let mut min_y = CoorComponent::MAX;
-
-    let mut temp_coords = Vec::new();
+    let mut temp_coords: HashMap<char, (Coor, Coor, CoordinatesSet)> = HashMap::new();
+    fn insert_temp_coords(
+        c: char,
+        x: Coor,
+        y: Coor,
+        temp_coords: &mut HashMap<char, (Coor, Coor, CoordinatesSet)>,
+    ) {
+        let existing =
+            temp_coords
+                .entry(c)
+                .or_insert((Coor::MAX, Coor::MAX, CoordinatesSet::new()));
+        existing.0 = min(existing.0, x);
+        existing.1 = min(existing.1, y);
+        existing.2.insert(Coordinates(x, y));
+    }
 
     for (y, l) in s.lines().enumerate() {
         for (x, c) in l.chars().enumerate() {
             if !c.is_whitespace() {
-                let x = x as CoorComponent;
-                let y = y as CoorComponent;
                 // TODO: Check that x and y fit into the CoorComponent type.
                 // Doing so would mean we'd have to return a Result instead.
                 // Currently, this doesn't even panic, but continues innocently (yet wrongly)
-                min_x = min(min_x, x);
-                min_y = min(min_y, y);
-                temp_coords.push((c, Coor(x, y)));
+                let x = x as Coor;
+                let y = y as Coor;
+                global_min_x = min(global_min_x, x);
+                global_min_y = min(global_min_y, y);
+
+                insert_temp_coords(c, x, y, &mut temp_coords);
                 if c != BOUNDS_CHAR {
-                    temp_coords.push((BOUNDS_CHAR, Coor(x, y)));
+                    insert_temp_coords(BOUNDS_CHAR, x, y, &mut temp_coords);
                 }
             }
         }
     }
 
-    let shift = Coor(min_x, min_y);
-    let mut charmap: HashMap<char, CoorSet> = HashMap::new();
-    for (c, coor) in temp_coords {
-        let shifted_coor = Coor(coor.0 - shift.0, coor.1 - shift.1);
-        charmap
-            .entry(c)
-            .or_insert_with(CoorSet::new)
-            .insert(shifted_coor);
-    }
-
-    charmap
+    temp_coords
+        .into_values()
+        .map(|(min_x, min_y, coors)| {
+            (
+                Offset(min_x - global_min_x, min_y - global_min_y),
+                Shape(
+                    coors
+                        .into_iter()
+                        .map(|Coordinates(x, y)| Coordinates(x - min_x, y - min_y))
+                        .collect(),
+                ),
+            )
+        })
+        .collect()
 }
 
 pub fn solve_puzzle(start: &str, goal: &str) {
-    let start_charcoorsmap = string_to_charcoorsmap(start);
-    let goal_charcoorsmap = string_to_charcoorsmap(goal);
-
-    // TODO: Handle this gracefully rather than panicking
-    assert_eq!(
-        start_charcoorsmap
-            .get(&BOUNDS_CHAR)
-            .unwrap_or(&CoorSet::new()),
-        goal_charcoorsmap
-            .get(&BOUNDS_CHAR)
-            .unwrap_or(&CoorSet::new()),
-        "The start and goal must have the same bounds."
-    );
+    let start_offsetshapes = string_to_offset_shapes(start);
+    let goal_offsetshapes = string_to_offset_shapes(goal);
+    // TODO: Maybe check that start and goal have the same bounds?
 }
 
 fn main() {
