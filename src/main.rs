@@ -15,7 +15,7 @@ type Bounds = Shape;
 type Offset = (Coor, Coor);
 
 type Shapekey = Vec<Shape>;
-type Offsets = Vec<Offset>;
+type Offsets = BTreeSet<Offset>;
 type Blockstate = Vec<Offsets>; // TODO: Perhaps this is better done on the stack, e.g. with https://crates.io/crates/arrayvec
 type Coortable<T> = Vec<Vec<T>>;
 
@@ -82,7 +82,7 @@ fn extract_shapekey(
     width: Coor,
     height: Coor,
 ) -> (Bounds, Shapekey, Blockstate) {
-    let mut shapestooffsets: HashMap<Shape, Vec<Offset>> = HashMap::new();
+    let mut shapestooffsets: HashMap<Shape, Offsets> = HashMap::new();
     // TODO: Handle empty strings gracefully
     // TODO: Also maybe don't use clone, but I'm not into ownership enough to think through how to handle this
     let bounds: Shape = start_chartocoors.get(&BOUNDS_CHAR).unwrap().clone();
@@ -105,8 +105,8 @@ fn extract_shapekey(
             .collect();
         shapestooffsets
             .entry(shape)
-            .or_insert_with(Vec::new)
-            .push((min_x, min_y));
+            .or_insert_with(BTreeSet::new)
+            .insert((min_x, min_y));
     }
     let shapekey: Shapekey = shapestooffsets.keys().map(|shape| shape.clone()).collect();
     let blockstate: Blockstate = shapestooffsets
