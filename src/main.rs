@@ -1,3 +1,4 @@
+use colored::{self, Colorize};
 use std::cmp::{max, min};
 use std::collections::BTreeSet;
 use std::collections::HashMap;
@@ -127,27 +128,40 @@ fn print_puzzle(
             blocks.push(block);
         }
     }
+    blocks.sort(); // ensures consistent indices
+    let blocks = blocks;
 
-    for y in 0..=width {
-        for x in 0..=height {
+    const IN_BLOCK: &str = "██";
+    const IN_BOUNDS: &str = "  ";
+    const OUT_OF_BOUNDS: &str = "░░";
+    println!("{}", OUT_OF_BOUNDS.repeat(width as usize + 2));
+    for y in 0..height {
+        print!("{}", OUT_OF_BOUNDS);
+        for x in 0..width {
             // Find block that contains (x, y)
-            let option_block: Option<&CoordinatesSet> =
-                blocks.iter().find(|block| block.contains(&(x, y)));
-            match option_block {
-                Some(block) => {
-                    print!("#");
+            let option_block_ix: Option<usize> =
+                blocks.iter().position(|block| block.contains(&(x, y)));
+            match option_block_ix {
+                Some(block_ix) => {
+                    // TODO: Is there some way to uhh promise that this unwrap never fails?
+                    // let block = blocks.get(block_ix).unwrap();
+                    let r = ((block_ix + 1) * 7573 % 256) as u8;
+                    let g = ((block_ix + 1) * 6841 % 256) as u8;
+                    let b = ((block_ix + 1) * 5953 % 256) as u8;
+                    print!("{}", IN_BLOCK.truecolor(r, g, b));
                 }
                 None => {
                     if bounds.contains(&(x, y)) {
-                        print!("{}", BOUNDS_CHAR);
+                        print!("{}", IN_BOUNDS);
                     } else {
-                        print!(" ");
+                        print!("{}", OUT_OF_BOUNDS);
                     }
                 }
             }
         }
-        println!();
+        println!("{}", OUT_OF_BOUNDS);
     }
+    println!("{}", OUT_OF_BOUNDS.repeat(width as usize + 2));
 }
 
 pub fn solve_puzzle(start: &str, goal: &str) {
@@ -168,6 +182,8 @@ pub fn solve_puzzle(start: &str, goal: &str) {
     // TODO: Handle this gracefully rather than panicking
     assert_eq!(width, goal_width, "start_width and goal_width don't match. This should never happen, as bounds are already asserted to be the same.");
     assert_eq!(height, goal_height, "start_height and goal_height don't match. This should never happen, as bounds are already asserted to be the same.");
+
+    println!("{},{}", width, height);
 
     let (bounds, shapekey, blockstate) =
         extract_shapekey(&start_chartocoors, &goal_chartocoors, width, height);
