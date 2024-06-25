@@ -386,7 +386,7 @@ fn get_neighboring_blockstates(
                        trimmed_movingshape_offsets: &Offsets|
      -> Vec<Offset> {
         let is_legal = |offsetty: Offset| -> bool {
-            for (shape_ix, shape_offsets) in blockstate.iter().enumerate() {
+            for (shape_ix, shape_offsets) in blockstate.nongoal_offsets.iter().enumerate() {
                 if shape_ix == movingshape_ix {
                     continue;
                 }
@@ -398,6 +398,14 @@ fn get_neighboring_blockstates(
                     {
                         return false;
                     }
+                }
+            }
+            for (goalvec_ix, offset) in blockstate.goal_offsets.iter().enumerate() {
+                let shapekey_ix = goal_shapekey_key[goalvec_ix];
+                if !nonintersectionkey[shapekey_ix][offset.0 as usize][offset.1 as usize]
+                    [movingshape_ix][offsetty.0 as usize][offsetty.1 as usize]
+                {
+                    return false;
                 }
             }
             for offset in trimmed_movingshape_offsets {
@@ -412,23 +420,46 @@ fn get_neighboring_blockstates(
         bfs_general(moving_offset, &is_legal)
     };
 
+    let bfs_goal = |moving_goalvec_ix: usize, moving_offset: Offset| -> Vec<Offset> {
+        let moving_shapekey_ix = goal_shapekey_key[moving_goalvec_ix];
+        let is_legal = |offsetty: Offset| -> bool {
+            for (shape_ix, shape_offsets) in blockstate.nongoal_offsets.iter().enumerate() {
+                for offset in shape_offsets {
+                    // TODO: How bad are these "as usize" conversions?
+                    // If they're really bad, I might just end up using usize as the type for Coor
+                    if !nonintersectionkey[shape_ix][offset.0 as usize][offset.1 as usize]
+                        [moving_shapekey_ix][offsetty.0 as usize][offsetty.1 as usize]
+                    {
+                        return false;
+                    }
+                }
+            }
+            for (goalvec_ix, offset) in blockstate.goal_offsets.iter().enumerate() {
+                if goalvec_ix == moving_goalvec_ix {
+                    continue;
+                }
+                let shapekey_ix = goal_shapekey_key[goalvec_ix];
+                if !nonintersectionkey[shapekey_ix][offset.0 as usize][offset.1 as usize]
+                    [moving_shapekey_ix][offsetty.0 as usize][offsetty.1 as usize]
+                {
+                    return false;
+                }
+            }
+            true
+        };
+        bfs_general(moving_offset, &is_legal)
+    };
+
     // It's okay to gather all these into a vector rather than a set,
     // because all neighbors WILL be unique.
     let mut neighboring_blockstates: Vec<Blockstate> = Vec::new();
     // Start with blockstate.goal_offsets first, to hopefully find the goal a little sooner
-    for (shapekey_key_ix, offset) in blockstate.goal_offsets.iter().enumerate() {
-        let shapekey_ix = goal_shapekey_key[shapekey_key_ix];
-
-        panic!("To be implemented!");
-        /*
-        for mutated_offset in bfs(shape_ix, *offset, &trimmed_shape_offsets) {
-            let mut mutated_shape_offsets = trimmed_shape_offsets.clone();
-            mutated_shape_offsets.insert(mutated_offset);
+    for (goalvec_ix, offset) in blockstate.goal_offsets.iter().enumerate() {
+        for mutated_offset in bfs_goal(goalvec_ix, *offset) {
             let mut new_blockstate = blockstate.clone();
-            new_blockstate[shape_ix] = mutated_shape_offsets;
+            new_blockstate.goal_offsets[goalvec_ix] = mutated_offset;
             neighboring_blockstates.push(new_blockstate);
         }
-        */
     }
     for (shapekey_ix, offsets) in blockstate.nongoal_offsets.iter().enumerate() {
         for offset in offsets.iter() {
