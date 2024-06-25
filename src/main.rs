@@ -2,7 +2,6 @@ use colored::{self, Colorize};
 use std::cmp::{max, min, Ordering};
 use std::collections::hash_map::Entry::Occupied;
 use std::collections::hash_map::Entry::Vacant;
-use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::collections::{BTreeSet, VecDeque};
@@ -19,7 +18,7 @@ type Bounds = Shape;
 type Offset = (Coor, Coor);
 
 type Offsets = BTreeSet<Offset>;
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct Blockstate {
     nongoal_offsets: Vec<Offsets>, // TODO: Perhaps this is better done on the stack, e.g. with https://crates.io/crates/arrayvec
     goal_offsets: Vec<Offset>,
@@ -603,14 +602,14 @@ pub fn solve_puzzle(start: &str, goal: &str) {
     assert_eq!(width, goal_width, "start_width and goal_width don't match. This should never happen, as bounds are already asserted to be the same.");
     assert_eq!(height, goal_height, "start_height and goal_height don't match. This should never happen, as bounds are already asserted to be the same.");
 
-    let (bounds, shapekey, blockstate, goal_shapekey_key, goal_target_offsets) =
+    let (bounds, shapekey, start_blockstate, goal_shapekey_key, goal_target_offsets) =
         extract_shapekey(&start_chartocoors, &goal_chartocoors);
 
     // TODO: Remove this
     print_puzzle(
         &bounds,
         &shapekey,
-        &blockstate,
+        &start_blockstate,
         &goal_shapekey_key,
         width,
         height,
@@ -618,28 +617,32 @@ pub fn solve_puzzle(start: &str, goal: &str) {
 
     let nonintersectionkey = build_nonintersectionkey(&bounds, &shapekey, width, height);
 
-    // TODO: Implement actual goal conditions
     // TODO: Implement A*
     // TODO: Add tests
-    // TODO: delete this
-    let mut big_ix = 0;
-    let mut big_val = shapekey[0].len();
-    for (ix, val) in shapekey.iter().enumerate() {
-        let lenny = val.len();
-        if lenny > big_val {
-            big_ix = ix;
-            big_val = lenny;
-        }
-    }
 
     let path = puzzle_bfs_with_path_reconstruction(
         &start_blockstate,
-        |blockstate| get_neighboring_blockstates(&blockstate, &nonintersectionkey, width, height),
-        |blockstate| blockstate[big_ix].iter().next().unwrap().1 > 5,
+        |blockstate| {
+            get_neighboring_blockstates(
+                &blockstate,
+                &nonintersectionkey,
+                &goal_shapekey_key,
+                width,
+                height,
+            )
+        },
+        |blockstate| blockstate.goal_offsets == goal_target_offsets,
     )
     .unwrap();
     for blockstate in &path {
-        print_puzzle(&bounds, &shapekey, &blockstate, width, height);
+        print_puzzle(
+            &bounds,
+            &shapekey,
+            &blockstate,
+            &goal_shapekey_key,
+            width,
+            height,
+        );
     }
     println!("{}", path.len());
 
@@ -651,17 +654,16 @@ fn main() {
         "
       tt
       tt
-    ..++..
+    ......
     .ppoo.
-     y--g
+     ypog
      yygg
       bb
       ..
-      ..
     ",
         "
-      ++
-      --
+      ..
+      ..
     ......
     ......
      ....
