@@ -219,12 +219,12 @@ fn extract_shapekey(
             .collect(),
         goal_offsets: goal_chars_startoff_targetoff
             .iter()
-            .map(|(_, _, target)| target.clone())
+            .map(|(_, start, _)| start.clone())
             .collect(),
     };
     let goal_target_offsets = goal_chars_startoff_targetoff
         .iter()
-        .map(|(_, start, _)| start.clone())
+        .map(|(_, _, target)| target.clone())
         .collect();
 
     (
