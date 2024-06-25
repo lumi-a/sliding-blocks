@@ -431,15 +431,16 @@ fn print_puzzle(
     bounds: &Bounds,
     shapekey: &Shapekey,
     blockstate: &Blockstate,
+    goal_shapekey_key: &GoalShapekeyKey,
     width: Coor,
     height: Coor,
 ) {
-    // TODO: Colors aren't the best choice here, because colors WILL change when
-    //  blocks move, giving the illusion of some blocks having changed shapes
+    // TODO: Colors aren't the best choice here, because colors WILL change after
+    // blocks move, giving the illusion of some blocks having changed shapes
 
     // Create vec of blocks:
     let mut blocks: Vec<CoordinatesSet> = Vec::new();
-    for (shape, offsets) in shapekey.iter().zip(blockstate.iter()) {
+    for (shape, offsets) in shapekey.iter().zip(blockstate.nongoal_offsets.iter()) {
         for offset in offsets {
             let block: CoordinatesSet = shape
                 .iter()
@@ -447,6 +448,13 @@ fn print_puzzle(
                 .collect();
             blocks.push(block);
         }
+    }
+    for (shapekey_ix, offset) in goal_shapekey_key.iter().zip(blockstate.goal_offsets.iter()) {
+        let block: CoordinatesSet = shapekey[*shapekey_ix]
+            .iter()
+            .map(|coor| (coor.0 + offset.0, coor.1 + offset.1))
+            .collect();
+        blocks.push(block);
     }
     blocks.sort(); // ensures consistent indices
     let blocks = blocks;
@@ -501,11 +509,18 @@ pub fn solve_puzzle(start: &str, goal: &str) {
     assert_eq!(width, goal_width, "start_width and goal_width don't match. This should never happen, as bounds are already asserted to be the same.");
     assert_eq!(height, goal_height, "start_height and goal_height don't match. This should never happen, as bounds are already asserted to be the same.");
 
-    let (bounds, shapekey, blockstate) =
-        extract_shapekey(&start_chartocoors, &goal_chartocoors, width, height);
+    let (bounds, shapekey, blockstate, goal_shapekey_key, goal_target_offsets) =
+        extract_shapekey(&start_chartocoors, &goal_chartocoors);
 
     // TODO: Remove this
-    print_puzzle(&bounds, &shapekey, &blockstate, width, height);
+    print_puzzle(
+        &bounds,
+        &shapekey,
+        &blockstate,
+        goal_shapekey_key,
+        width,
+        height,
+    );
 
     let nonintersectionkey = build_nonintersectionkey(&bounds, &shapekey, width, height);
 
