@@ -536,21 +536,22 @@ fn main() {
         "
       tt
       tt
-    ......
+    ..++..
     .ppoo.
-     ypog
+     y--g
      yygg
       bb
+      ..
     ",
         "
-      ..
-      ..
+      ++
+      --
     ......
     ......
      ....
      ....
-      ..
-      ..
+      tt
+      tt
     ",
     );
     solve_puzzle(puzzle.0, puzzle.1);
