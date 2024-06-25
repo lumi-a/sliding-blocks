@@ -21,6 +21,7 @@ struct Blockstate {
 }
 type Shapekey = Vec<Shape>;
 type GoalShapekeyKey = Vec<usize>; // Given an index in the Blockstate.goal_blocks vec, what is the index of its shape in the shapekey vec?
+type GoalTargetOffsets = Vec<Offset>; // At what offset is a block in a goal-position?
 type Coortable<T> = Vec<Vec<T>>;
 
 fn intersect_coortables(a: &Coortable<bool>, b: &Coortable<bool>) -> Coortable<bool> {
@@ -96,10 +97,16 @@ fn string_to_chartocoors(s: &str) -> (CharToCoors, Coor, Coor) {
 fn extract_shapekey(
     start_chartocoors: &CharToCoors,
     goal_chartocoors: &CharToCoors,
-) -> (Bounds, Shapekey, Blockstate, GoalShapekeyKey) {
+) -> (
+    Bounds,
+    Shapekey,
+    Blockstate,
+    GoalShapekeyKey,
+    GoalTargetOffsets,
+) {
     let mut chartoshape: HashMap<char, Shape> = HashMap::new();
     let mut shape_to_chars_and_offsets: HashMap<Shape, Vec<(char, Offset)>> = HashMap::new();
-    let mut goal_chars_and_offsets: Vec<(char, Offset)> = Vec::new();
+    let mut goal_chars_startoff_targetoff: Vec<(char, Offset, Offset)> = Vec::new(); // (char, start-offset, target-offset)
 
     // TODO: Handle empty strings gracefully
     // TODO: Also maybe don't use clone, but I'm not into ownership enough to think through how to handle this
@@ -143,8 +150,8 @@ fn extract_shapekey(
             // that are not in the startstring, then that puzzle is not correctly posed,
             // which we should communicate instead.
 
-            let (goal_min_x, goal_min_y) = get_mins(goal_coords);
-            goal_chars_and_offsets.push((*c, (goal_min_x, goal_min_y)));
+            let (target_min_x, target_min_y) = get_mins(goal_coords);
+            goal_chars_startoff_targetoff.push((*c, (min_x, min_y), (target_min_x, target_min_y)));
         }
     }
 
@@ -187,9 +194,10 @@ fn extract_shapekey(
         .map(|(shape, _)| shape.clone())
         .collect();
     // For all goal-blocks, now look up which index their shape in shapekey corresponds to
-    let goal_shapekey_key: GoalShapekeyKey = goal_chars_and_offsets
+    // TODO: Should we sort this first?
+    let goal_shapekey_key: GoalShapekeyKey = goal_chars_startoff_targetoff
         .iter()
-        .map(|(c, _)| {
+        .map(|(c, _, _)| {
             raw_shapekey
                 .iter()
                 .position(|(shape, _)| shape == chartoshape.get(c).unwrap())
@@ -207,14 +215,25 @@ fn extract_shapekey(
                     .map(|(_, offset)| offset.clone())
                     .collect()
             })
+            .filter(|offsets: &Offsets| !offsets.is_empty())
             .collect(),
-        goal_offsets: goal_chars_and_offsets
+        goal_offsets: goal_chars_startoff_targetoff
             .iter()
-            .map(|(_, offset)| offset.clone())
+            .map(|(_, _, target)| target.clone())
             .collect(),
     };
+    let goal_target_offsets = goal_chars_startoff_targetoff
+        .iter()
+        .map(|(_, start, _)| start.clone())
+        .collect();
 
-    (bounds, shapekey, blockstate, goal_shapekey_key)
+    (
+        bounds,
+        shapekey,
+        blockstate,
+        goal_shapekey_key,
+        goal_target_offsets,
+    )
 }
 
 fn build_nonintersectionkey(
