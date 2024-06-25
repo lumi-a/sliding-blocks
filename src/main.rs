@@ -15,7 +15,7 @@ type Bounds = Shape;
 type Offset = (Coor, Coor);
 
 type Offsets = BTreeSet<Offset>;
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 struct Blockstate {
     nongoal_offsets: Vec<Offsets>, // TODO: Perhaps this is better done on the stack, e.g. with https://crates.io/crates/arrayvec
     goal_offsets: Vec<Offset>,
@@ -288,6 +288,7 @@ fn build_nonintersectionkey(
 fn get_neighboring_blockstates(
     blockstate: &Blockstate,
     nonintersectionkey: &Nonintersectionkey,
+    goal_shapekey_key: &GoalShapekeyKey,
     width: Coor,
     height: Coor,
 ) -> Vec<Blockstate> {
@@ -319,40 +320,12 @@ fn get_neighboring_blockstates(
         }
     }
     */ // for now, just this bad implementation of bfs:
-    // TODO: For this, the order of the shapekeys actually affects performance, so
-    // we should make sure that larger shapes get sorted first
-    let bfs = |moving_shape_ix: usize,
-               moving_offset: Offset,
-               trimmed_shape_offsets: &Offsets|
-     -> Vec<Offset> {
-        let is_legal = |offsetty: Offset| -> bool {
-            for (shape_ix, shape_offsets) in blockstate.iter().enumerate() {
-                if shape_ix == moving_shape_ix {
-                    continue;
-                }
-                for offset in shape_offsets {
-                    // TODO: How bad are these "as usize" conversions?
-                    // If they're really bad, I might just end up using usize as the type for Coor
-                    if !nonintersectionkey[shape_ix][offset.0 as usize][offset.1 as usize]
-                        [moving_shape_ix][offsetty.0 as usize][offsetty.1 as usize]
-                    {
-                        return false;
-                    }
-                }
-            }
-            for offset in trimmed_shape_offsets {
-                if !nonintersectionkey[moving_shape_ix][offset.0 as usize][offset.1 as usize]
-                    [moving_shape_ix][offsetty.0 as usize][offsetty.1 as usize]
-                {
-                    return false;
-                }
-            }
-            true
-        };
+    // TODO: I have no idea if `&dyn Fn(Offset) -> bool` is the right signature as I didn't learn about `&dyn` yet
+    let bfs_general = |initial_offset: Offset, is_legal: &dyn Fn(Offset) -> bool| {
         let mut legal_offsets: Vec<Offset> = Vec::new();
         let mut seen_offsets: BTreeSet<Offset> = BTreeSet::new();
-        seen_offsets.insert(moving_offset);
-        let mut stack: Vec<Offset> = vec![moving_offset];
+        seen_offsets.insert(initial_offset);
+        let mut stack: Vec<Offset> = vec![initial_offset];
         while !stack.is_empty() {
             let offset = stack.pop().unwrap();
 
@@ -408,20 +381,64 @@ fn get_neighboring_blockstates(
 
         legal_offsets
     };
+    let bfs_nongoal = |movingshape_ix: usize,
+                       moving_offset: Offset,
+                       trimmed_movingshape_offsets: &Offsets|
+     -> Vec<Offset> {
+        let is_legal = |offsetty: Offset| -> bool {
+            for (shape_ix, shape_offsets) in blockstate.iter().enumerate() {
+                if shape_ix == movingshape_ix {
+                    continue;
+                }
+                for offset in shape_offsets {
+                    // TODO: How bad are these "as usize" conversions?
+                    // If they're really bad, I might just end up using usize as the type for Coor
+                    if !nonintersectionkey[shape_ix][offset.0 as usize][offset.1 as usize]
+                        [movingshape_ix][offsetty.0 as usize][offsetty.1 as usize]
+                    {
+                        return false;
+                    }
+                }
+            }
+            for offset in trimmed_movingshape_offsets {
+                if !nonintersectionkey[movingshape_ix][offset.0 as usize][offset.1 as usize]
+                    [movingshape_ix][offsetty.0 as usize][offsetty.1 as usize]
+                {
+                    return false;
+                }
+            }
+            true
+        };
+        bfs_general(moving_offset, &is_legal)
+    };
 
     // It's okay to gather all these into a vector rather than a set,
     // because all neighbors WILL be unique.
     let mut neighboring_blockstates: Vec<Blockstate> = Vec::new();
+    // Start with blockstate.goal_offsets first, to hopefully find the goal a little sooner
+    for (shapekey_key_ix, offset) in blockstate.goal_offsets.iter().enumerate() {
+        let shapekey_ix = goal_shapekey_key[shapekey_key_ix];
 
-    for (shape_ix, shape_offsets) in blockstate.iter().enumerate() {
-        for offset in shape_offsets.iter() {
-            let mut trimmed_shape_offsets = shape_offsets.clone();
+        panic!("To be implemented!");
+        /*
+        for mutated_offset in bfs(shape_ix, *offset, &trimmed_shape_offsets) {
+            let mut mutated_shape_offsets = trimmed_shape_offsets.clone();
+            mutated_shape_offsets.insert(mutated_offset);
+            let mut new_blockstate = blockstate.clone();
+            new_blockstate[shape_ix] = mutated_shape_offsets;
+            neighboring_blockstates.push(new_blockstate);
+        }
+        */
+    }
+    for (shapekey_ix, offsets) in blockstate.nongoal_offsets.iter().enumerate() {
+        for offset in offsets.iter() {
+            let mut trimmed_shape_offsets = offsets.clone();
             trimmed_shape_offsets.remove(offset);
-            for mutated_offset in bfs(shape_ix, *offset, &trimmed_shape_offsets) {
+            for mutated_offset in bfs_nongoal(shapekey_ix, *offset, &trimmed_shape_offsets) {
                 let mut mutated_shape_offsets = trimmed_shape_offsets.clone();
                 mutated_shape_offsets.insert(mutated_offset);
                 let mut new_blockstate = blockstate.clone();
-                new_blockstate[shape_ix] = mutated_shape_offsets;
+                new_blockstate.nongoal_offsets[shapekey_ix] = mutated_shape_offsets;
                 neighboring_blockstates.push(new_blockstate);
             }
         }
@@ -526,8 +543,13 @@ pub fn solve_puzzle(start: &str, goal: &str) {
 
     let nonintersectionkey = build_nonintersectionkey(&bounds, &shapekey, width, height);
 
-    let neighboring_blockstates =
-        get_neighboring_blockstates(&blockstate, &nonintersectionkey, width, height);
+    let neighboring_blockstates = get_neighboring_blockstates(
+        &blockstate,
+        &nonintersectionkey,
+        &goal_shapekey_key,
+        width,
+        height,
+    );
     for neighbor in neighboring_blockstates {
         print_puzzle(
             &bounds,
