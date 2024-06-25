@@ -15,6 +15,7 @@ type Bounds = Shape;
 type Offset = (Coor, Coor);
 
 type Offsets = BTreeSet<Offset>;
+#[derive(Debug)]
 struct Blockstate {
     nongoal_offsets: Vec<Offsets>, // TODO: Perhaps this is better done on the stack, e.g. with https://crates.io/crates/arrayvec
     goal_offsets: Vec<Offset>,
@@ -411,6 +412,7 @@ fn get_neighboring_blockstates(
     // It's okay to gather all these into a vector rather than a set,
     // because all neighbors WILL be unique.
     let mut neighboring_blockstates: Vec<Blockstate> = Vec::new();
+
     for (shape_ix, shape_offsets) in blockstate.iter().enumerate() {
         for offset in shape_offsets.iter() {
             let mut trimmed_shape_offsets = shape_offsets.clone();
@@ -517,7 +519,7 @@ pub fn solve_puzzle(start: &str, goal: &str) {
         &bounds,
         &shapekey,
         &blockstate,
-        goal_shapekey_key,
+        &goal_shapekey_key,
         width,
         height,
     );
@@ -527,7 +529,14 @@ pub fn solve_puzzle(start: &str, goal: &str) {
     let neighboring_blockstates =
         get_neighboring_blockstates(&blockstate, &nonintersectionkey, width, height);
     for neighbor in neighboring_blockstates {
-        print_puzzle(&bounds, &shapekey, &neighbor, width, height);
+        print_puzzle(
+            &bounds,
+            &shapekey,
+            &neighbor,
+            &goal_shapekey_key,
+            width,
+            height,
+        );
     }
 }
 
