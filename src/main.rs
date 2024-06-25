@@ -1,7 +1,11 @@
 use colored::{self, Colorize};
 use std::cmp::{max, min, Ordering};
+use std::collections::hash_map::Entry::Occupied;
+use std::collections::hash_map::Entry::Vacant;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
+use std::collections::HashSet;
+use std::collections::{BTreeSet, VecDeque};
 
 // TODO: Perhaps it's better to abstract most of these into structs
 type Coor = u8;
@@ -540,6 +544,46 @@ fn print_puzzle(
     println!("{}", OUT_OF_BOUNDS.repeat(width as usize + 2));
 }
 
+fn puzzle_bfs_with_path_reconstruction<F, G>(
+    blockstate: &Blockstate,
+    get_neighbors: F,
+    goal_check: G,
+) -> Option<Vec<Blockstate>>
+where
+    F: Fn(&Blockstate) -> Vec<Blockstate>,
+    G: Fn(&Blockstate) -> bool,
+{
+    let mut queue: VecDeque<Blockstate> = VecDeque::new();
+    // TODO: Better datastructures?
+    // TODO: Definitely not memory efficient, we should store pointers instead
+    let mut seen: HashMap<Blockstate, Option<Blockstate>> = HashMap::new();
+    queue.push_back(blockstate.clone());
+    seen.insert(blockstate.clone(), None);
+    while !queue.is_empty() {
+        let blockstate = queue.pop_front().unwrap();
+        if goal_check(&blockstate) {
+            let mut path: Vec<Blockstate> = vec![blockstate.clone()];
+            let mut curr = blockstate.clone();
+            while let Some(prev) = seen[&curr].clone() {
+                path.push(prev.clone());
+                curr = prev;
+            }
+            path.reverse();
+            return Some(path);
+        }
+        for neighbor in get_neighbors(&blockstate) {
+            match seen.entry(neighbor.clone()) {
+                Occupied(_) => (),
+                Vacant(entry) => {
+                    entry.insert(Some(blockstate.clone()));
+                    queue.push_back(neighbor);
+                }
+            }
+        }
+    }
+    None
+}
+
 pub fn solve_puzzle(start: &str, goal: &str) {
     let (start_chartocoors, width, height) = string_to_chartocoors(start);
     let (goal_chartocoors, goal_width, goal_height) = string_to_chartocoors(goal);
@@ -574,23 +618,32 @@ pub fn solve_puzzle(start: &str, goal: &str) {
 
     let nonintersectionkey = build_nonintersectionkey(&bounds, &shapekey, width, height);
 
-    let neighboring_blockstates = get_neighboring_blockstates(
-        &blockstate,
-        &nonintersectionkey,
-        &goal_shapekey_key,
-        width,
-        height,
-    );
-    for neighbor in neighboring_blockstates {
-        print_puzzle(
-            &bounds,
-            &shapekey,
-            &neighbor,
-            &goal_shapekey_key,
-            width,
-            height,
-        );
+    // TODO: Implement actual goal conditions
+    // TODO: Implement A*
+    // TODO: Add tests
+    // TODO: delete this
+    let mut big_ix = 0;
+    let mut big_val = shapekey[0].len();
+    for (ix, val) in shapekey.iter().enumerate() {
+        let lenny = val.len();
+        if lenny > big_val {
+            big_ix = ix;
+            big_val = lenny;
+        }
     }
+
+    let path = puzzle_bfs_with_path_reconstruction(
+        &start_blockstate,
+        |blockstate| get_neighboring_blockstates(&blockstate, &nonintersectionkey, width, height),
+        |blockstate| blockstate[big_ix].iter().next().unwrap().1 > 5,
+    )
+    .unwrap();
+    for blockstate in &path {
+        print_puzzle(&bounds, &shapekey, &blockstate, width, height);
+    }
+    println!("{}", path.len());
+
+    // TODO: Print path
 }
 
 fn main() {
@@ -603,6 +656,7 @@ fn main() {
      y--g
      yygg
       bb
+      ..
       ..
     ",
         "
