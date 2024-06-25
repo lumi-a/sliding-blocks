@@ -1,5 +1,5 @@
 use colored::{self, Colorize};
-use std::cmp::{max, min};
+use std::cmp::{max, min, Ordering};
 use std::collections::BTreeSet;
 use std::collections::HashMap;
 
@@ -14,9 +14,13 @@ type Shape = BTreeSet<Coordinates>;
 type Bounds = Shape;
 type Offset = (Coor, Coor);
 
-type Shapekey = Vec<Shape>;
 type Offsets = BTreeSet<Offset>;
-type Blockstate = Vec<Offsets>; // TODO: Perhaps this is better done on the stack, e.g. with https://crates.io/crates/arrayvec
+struct Blockstate {
+    nongoal_offsets: Vec<Offsets>, // TODO: Perhaps this is better done on the stack, e.g. with https://crates.io/crates/arrayvec
+    goal_offsets: Vec<Offset>,
+}
+type Shapekey = Vec<Shape>;
+type GoalShapekeyKey = Vec<usize>; // Given an index in the Blockstate.goal_blocks vec, what is the index of its shape in the shapekey vec?
 type Coortable<T> = Vec<Vec<T>>;
 
 fn intersect_coortables(a: &Coortable<bool>, b: &Coortable<bool>) -> Coortable<bool> {
@@ -92,42 +96,125 @@ fn string_to_chartocoors(s: &str) -> (CharToCoors, Coor, Coor) {
 fn extract_shapekey(
     start_chartocoors: &CharToCoors,
     goal_chartocoors: &CharToCoors,
-    width: Coor,
-    height: Coor,
-) -> (Bounds, Shapekey, Blockstate) {
-    let mut shapestooffsets: HashMap<Shape, Offsets> = HashMap::new();
+) -> (Bounds, Shapekey, Blockstate, GoalShapekeyKey) {
+    let mut chartoshape: HashMap<char, Shape> = HashMap::new();
+    let mut shape_to_chars_and_offsets: HashMap<Shape, Vec<(char, Offset)>> = HashMap::new();
+    let mut goal_chars_and_offsets: Vec<(char, Offset)> = Vec::new();
+
     // TODO: Handle empty strings gracefully
     // TODO: Also maybe don't use clone, but I'm not into ownership enough to think through how to handle this
     let bounds: Shape = start_chartocoors.get(&BOUNDS_CHAR).unwrap().clone();
+
+    fn get_mins(coordinates_set: &CoordinatesSet) -> (Coor, Coor) {
+        // Extract min-x and min-y.
+        // Assumes that coordinatesSet is nonempty.
+        // TODO: Is that a misassumption?
+        let mut min_x = Coor::MAX;
+        let mut min_y = Coor::MAX;
+        for coor in coordinates_set {
+            min_x = min(min_x, coor.0);
+            min_y = min(min_y, coor.1);
+        }
+        (min_x, min_y)
+    }
 
     for (c, start_coords) in start_chartocoors.iter() {
         if c == &BOUNDS_CHAR {
             continue;
         }
-        // Extract min-x and min-y.
-        // Assumes that start_coords is nonempty. TODO: Is that a misassumption?
-        let mut min_x = Coor::MAX;
-        let mut min_y = Coor::MAX;
-        for coor in start_coords {
-            min_x = min(min_x, coor.0);
-            min_y = min(min_y, coor.1);
-        }
-        let shape = start_coords
+
+        let (min_x, min_y) = get_mins(start_coords);
+        let shape: Shape = start_coords
             .iter()
             .map(|coor| (coor.0 - min_x, coor.1 - min_y))
             .collect();
-        shapestooffsets
+
+        // This is only used to map goal-shapes to their indices in shapekey later
+        chartoshape.insert(*c, shape.clone());
+
+        shape_to_chars_and_offsets
             .entry(shape)
-            .or_insert_with(BTreeSet::new)
-            .insert((min_x, min_y));
+            .or_insert_with(Vec::new)
+            .push((*c, (min_x, min_y)));
+        if let Some(goal_coords) = goal_chartocoors.get(c) {
+            // TODO: Because we're currently in the start-loop, and won't separately
+            // do a goal-loop, we'll silently ignore any characters in the goalstring
+            // that aren't present in the startstring. If there are chars in the goalstring
+            // that are not in the startstring, then that puzzle is not correctly posed,
+            // which we should communicate instead.
+
+            let (goal_min_x, goal_min_y) = get_mins(goal_coords);
+            goal_chars_and_offsets.push((*c, (goal_min_x, goal_min_y)));
+        }
     }
-    let shapekey: Shapekey = shapestooffsets.keys().map(|shape| shape.clone()).collect();
-    let blockstate: Blockstate = shapestooffsets
-        .values()
-        .map(|offsets| offsets.clone())
+
+    let mut raw_shapekey: Vec<(Shape, Vec<(char, Offset)>)> = shape_to_chars_and_offsets
+        .iter()
+        .map(|(shape, chars_and_offsets)| (shape.clone(), chars_and_offsets.clone()))
         .collect();
 
-    (bounds, shapekey, blockstate)
+    raw_shapekey.sort_by(
+        |(a_shape, a_chars_and_offsets), (b_shape, b_chars_and_offsets)| {
+            let a_shape_only_for_goals = a_chars_and_offsets
+                .iter()
+                .all(|(c, _)| goal_chartocoors.get(c).is_some());
+            let b_shape_only_for_goals = b_chars_and_offsets
+                .iter()
+                .all(|(c, _)| goal_chartocoors.get(c).is_some());
+
+            // Sort shapes that are only for goals last
+            if a_shape_only_for_goals && !b_shape_only_for_goals {
+                Ordering::Greater
+            } else if !a_shape_only_for_goals && b_shape_only_for_goals {
+                Ordering::Less
+            } else {
+                // If both or neither are only for goals, sort by size first
+                // (Idea being: If shapes are larger, we find intersections earlier)
+                let a_size = a_shape.len();
+                let b_size = b_shape.len();
+                if a_size == b_size {
+                    // And if sizes equal, just compare the shapes as sets
+                    a_shape.cmp(b_shape)
+                } else {
+                    a_size.cmp(&b_size)
+                }
+            }
+        },
+    );
+
+    let shapekey: Shapekey = raw_shapekey
+        .iter()
+        .map(|(shape, _)| shape.clone())
+        .collect();
+    // For all goal-blocks, now look up which index their shape in shapekey corresponds to
+    let goal_shapekey_key: GoalShapekeyKey = goal_chars_and_offsets
+        .iter()
+        .map(|(c, _)| {
+            raw_shapekey
+                .iter()
+                .position(|(shape, _)| shape == chartoshape.get(c).unwrap())
+                .unwrap()
+        })
+        .collect();
+
+    let blockstate: Blockstate = Blockstate {
+        nongoal_offsets: raw_shapekey
+            .iter()
+            .map(|(_, chars_and_offsets)| {
+                chars_and_offsets
+                    .iter()
+                    .filter(|(c, _)| !goal_chartocoors.get(c).is_some())
+                    .map(|(_, offset)| offset.clone())
+                    .collect()
+            })
+            .collect(),
+        goal_offsets: goal_chars_and_offsets
+            .iter()
+            .map(|(_, offset)| offset.clone())
+            .collect(),
+    };
+
+    (bounds, shapekey, blockstate, goal_shapekey_key)
 }
 
 fn build_nonintersectionkey(
