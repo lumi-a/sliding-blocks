@@ -1,3 +1,5 @@
+pub mod examples;
+
 use colored::{self, Colorize};
 use std::cmp::{max, min, Ordering};
 use std::collections::hash_map::Entry::Occupied;
@@ -634,6 +636,7 @@ pub fn solve_puzzle(start: &str, goal: &str) {
         |blockstate| blockstate.goal_offsets == goal_target_offsets,
     )
     .unwrap();
+    /*
     for blockstate in &path {
         print_puzzle(
             &bounds,
@@ -644,6 +647,7 @@ pub fn solve_puzzle(start: &str, goal: &str) {
             height,
         );
     }
+    */
     println!("{}", path.len());
 
     // TODO: Print path
