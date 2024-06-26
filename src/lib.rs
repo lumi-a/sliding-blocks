@@ -2,6 +2,7 @@ pub mod examples;
 
 use colored::{self, Colorize};
 use itertools::{iproduct, Itertools};
+use ordered_float::OrderedFloat as FloatOrd;
 use pathfinding;
 use std::cmp::{max, min, Ordering};
 use std::collections::hash_map::Entry::Occupied;
@@ -32,7 +33,9 @@ type GoalShapekeyKey = Vec<usize>; // Given an index in the Blockstate.goal_bloc
 type GoalTargetOffsets = Vec<Offset>; // At what offset is a block in a goal-position?
 type Coortable<T> = Vec<Vec<T>>;
 
-type MinkowskiDiams = Vec<Vec<f32>>; // Given an index in the Blockstate.goal_blocks vec, and an index of its shape in the shapekey vec, what is the diameter of the minkowski sum of the two shapes? Used for heuristic.
+type Floaty = FloatOrd<f32>; // I *need* a total order on floats, *please*
+
+type MinkowskiDiams = Vec<Vec<Floaty>>; // Given an index in the Blockstate.goal_blocks vec, and an index of its shape in the shapekey vec, what is the diameter of the minkowski sum of the two shapes? Used for heuristic.
 
 fn intersect_coortables(a: &Coortable<bool>, b: &Coortable<bool>) -> Coortable<bool> {
     a.iter()
@@ -252,7 +255,7 @@ fn get_minkowski_diams(goal_shapekey_key: &GoalShapekeyKey, shapekey: &Shapekey)
     let mut minkowskiDiams = MinkowskiDiams::new();
     for goalvec_ix in goal_shapekey_key.iter() {
         let goal_shape = shapekey.get(*goalvec_ix).unwrap();
-        let mut goal_diams: Vec<f32> = Vec::new();
+        let mut goal_diams: Vec<Floaty> = Vec::new();
         for shape in shapekey {
             // TODO: the sum might overflow
             let minkowski_sum: Shape = iproduct!(goal_shape, shape)
@@ -266,7 +269,7 @@ fn get_minkowski_diams(goal_shapekey_key: &GoalShapekeyKey, shapekey: &Shapekey)
                 .max()
                 .unwrap() as f32;
 
-            goal_diams.push(1.0 / diam);
+            goal_diams.push(FloatOrd(1.0 / diam));
         }
         minkowskiDiams.push(goal_diams)
     }
@@ -319,6 +322,44 @@ fn build_nonintersectionkey(
         nik.push(nik_a);
     }
     nik
+}
+
+fn heuristic(
+    blockstate: &Blockstate,
+    nonintersectionkey: &Nonintersectionkey,
+    goal_shapekey_key: &GoalShapekeyKey,
+    goal_target_offsets: &GoalTargetOffsets,
+) -> f32 {
+    blockstate
+        .goal_offsets
+        .iter()
+        .enumerate()
+        .map(|(goalvec_ix, current_goal_offset)| {
+            let goal_shapeix = goal_shapekey_key[goalvec_ix];
+            let goal_target_offset = goal_target_offsets[goalvec_ix];
+            let nik_goal = nonintersectionkey.get(goal_shapeix).unwrap();
+            let (_, cost): (_, Floaty) = pathfinding::directed::dijkstra::dijkstra(
+                current_goal_offset,
+                |goal_offset| {
+                    [
+                        (goal_offset.0, goal_offset.1 + 1),
+                        (goal_offset.0 + 1, goal_offset.1),
+                        (goal_offset.0, goal_offset.1 - 1),
+                        (goal_offset.0 - 1, goal_offset.1),
+                    ]
+                    .iter()
+                    .filter(|offset| !nik_goal[offset.0 as usize][offset.1 as usize].is_empty()) // TODO: This is a TERRIBLE hack to check whether offset is in-bounds
+                    .map(|offset| (*offset, FloatOrd(1.0))) // TODO: implement actual sum
+                    .collect_vec()
+                },
+                |goal_offset| *goal_offset == goal_target_offset,
+            )
+            .unwrap(); // TODO: This unwrap might very well fail in practice
+            cost
+        })
+        .max()
+        .unwrap()
+        .into()
 }
 
 fn get_neighboring_blockstates(
