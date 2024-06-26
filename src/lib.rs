@@ -1,6 +1,7 @@
 pub mod examples;
 
 use colored::{self, Colorize};
+use itertools::{iproduct, Itertools};
 use pathfinding;
 use std::cmp::{max, min, Ordering};
 use std::collections::hash_map::Entry::Occupied;
@@ -30,6 +31,8 @@ type Shapekey = Vec<Shape>;
 type GoalShapekeyKey = Vec<usize>; // Given an index in the Blockstate.goal_blocks vec, what is the index of its shape in the shapekey vec?
 type GoalTargetOffsets = Vec<Offset>; // At what offset is a block in a goal-position?
 type Coortable<T> = Vec<Vec<T>>;
+
+type MinkowskiDiams = Vec<Vec<f32>>; // Given an index in the Blockstate.goal_blocks vec, and an index of its shape in the shapekey vec, what is the diameter of the minkowski sum of the two shapes? Used for heuristic.
 
 fn intersect_coortables(a: &Coortable<bool>, b: &Coortable<bool>) -> Coortable<bool> {
     a.iter()
@@ -101,6 +104,8 @@ fn string_to_chartocoors(s: &str) -> (CharToCoors, Coor, Coor) {
     (chartocoors, width, height)
 }
 
+// TODO: This function has a bad name by now. I think it can also be moved into
+// the pre-processing function?
 fn extract_shapekey(
     start_chartocoors: &CharToCoors,
     goal_chartocoors: &CharToCoors,
@@ -241,6 +246,31 @@ fn extract_shapekey(
         goal_shapekey_key,
         goal_target_offsets,
     )
+}
+
+fn get_minkowski_diams(goal_shapekey_key: &GoalShapekeyKey, shapekey: &Shapekey) -> MinkowskiDiams {
+    let mut minkowskiDiams = MinkowskiDiams::new();
+    for goalvec_ix in goal_shapekey_key.iter() {
+        let goal_shape = shapekey.get(*goalvec_ix).unwrap();
+        let mut goal_diams: Vec<f32> = Vec::new();
+        for shape in shapekey {
+            // TODO: the sum might overflow
+            let minkowski_sum: Shape = iproduct!(goal_shape, shape)
+                .map(|(a, b)| (a.0 + b.0, a.1 + b.1))
+                .collect();
+
+            // TODO: I think this can be made to run in linear time w.r.t. |minkowski-sum|,
+            // rather than quadratic.
+            let diam: f32 = iproduct!(minkowski_sum.iter(), minkowski_sum.iter())
+                .map(|(a, b)| a.0.abs_diff(b.0) + a.1.abs_diff(b.1))
+                .max()
+                .unwrap() as f32;
+
+            goal_diams.push(1.0 / diam);
+        }
+        minkowskiDiams.push(goal_diams)
+    }
+    minkowskiDiams
 }
 
 fn build_nonintersectionkey(
@@ -619,7 +649,11 @@ fn solve_puzzle_preprocessing(
 
     let (bounds, shapekey, start_blockstate, goal_shapekey_key, goal_target_offsets) =
         extract_shapekey(&start_chartocoors, &goal_chartocoors);
+    println!("Starting Minkowski.");
+    let minkowskiDiams = get_minkowski_diams(&goal_shapekey_key, &shapekey);
+    println!("Starting Nik.");
     let nonintersectionkey = build_nonintersectionkey(&bounds, &shapekey, width, height);
+    println!("Starting Search.");
 
     (
         bounds,
