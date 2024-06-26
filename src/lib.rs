@@ -585,7 +585,19 @@ where
     None
 }
 
-pub fn solve_puzzle(start: &str, goal: &str) {
+fn solve_puzzle_preprocessing(
+    start: &str,
+    goal: &str,
+) -> (
+    Bounds,
+    Shapekey,
+    Blockstate,
+    Nonintersectionkey,
+    GoalShapekeyKey,
+    GoalTargetOffsets,
+    Coor,
+    Coor,
+) {
     let (start_chartocoors, width, height) = string_to_chartocoors(start);
     let (goal_chartocoors, goal_width, goal_height) = string_to_chartocoors(goal);
 
@@ -606,23 +618,34 @@ pub fn solve_puzzle(start: &str, goal: &str) {
 
     let (bounds, shapekey, start_blockstate, goal_shapekey_key, goal_target_offsets) =
         extract_shapekey(&start_chartocoors, &goal_chartocoors);
-
-    // TODO: Remove this
-    /*
-    print_puzzle(
-        &bounds,
-        &shapekey,
-        &start_blockstate,
-        &goal_shapekey_key,
-        width,
-        height,
-    );
-    */
-
     let nonintersectionkey = build_nonintersectionkey(&bounds, &shapekey, width, height);
 
+    (
+        bounds,
+        shapekey,
+        start_blockstate,
+        nonintersectionkey,
+        goal_shapekey_key,
+        goal_target_offsets,
+        width,
+        height,
+    )
+}
+
+pub fn solve_puzzle(start: &str, goal: &str) {
     // TODO: Implement A*
     // TODO: Add tests
+
+    let (
+        bounds,
+        shapekey,
+        start_blockstate,
+        nonintersectionkey,
+        goal_shapekey_key,
+        goal_target_offsets,
+        width,
+        height,
+    ) = solve_puzzle_preprocessing(start, goal);
 
     let path = puzzle_bfs_with_path_reconstruction(
         &start_blockstate,
@@ -638,18 +661,6 @@ pub fn solve_puzzle(start: &str, goal: &str) {
         |blockstate| blockstate.goal_offsets == goal_target_offsets,
     )
     .unwrap();
-    /*
-    for blockstate in &path {
-        print_puzzle(
-            &bounds,
-            &shapekey,
-            &blockstate,
-            &goal_shapekey_key,
-            width,
-            height,
-        );
-    }
-    */
     assert!(path.len() > 0);
     assert!(path.len() < 1000);
 
