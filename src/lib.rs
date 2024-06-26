@@ -259,22 +259,26 @@ fn get_minkowski_diams(goal_shapekey_key: &GoalShapekeyKey, shapekey: &Shapekey)
         for shape in shapekey {
             // TODO: the sum might overflow
             // TODO: NONE of this actually is a minkowski-sum. Rename all variables
-            let minkowski_sum: Shape = iproduct!(goal_shape, shape)
-                .map(|(a, b)| (a.0 + b.0, a.1 + b.1))
+            let minkowski_sum: BTreeSet<(isize, isize)> = iproduct!(goal_shape, goal_shape, shape)
+                .map(|(g, dg, s)| {
+                    (
+                        g.0 as isize - dg.0 as isize + s.0 as isize,
+                        g.1 as isize - dg.1 as isize + s.1 as isize,
+                    )
+                })
                 .collect();
             println!(
                 "goalshape {:?} shape {:?} minkowski_sum: {:?}",
                 goal_shape, shape, minkowski_sum
             );
 
-            // TODO: I think this can be made to run in linear time w.r.t. |minkowski-sum|,
-            // rather than quadratic.
-            let diam: f32 = iproduct!(minkowski_sum.iter(), minkowski_sum.iter())
-                .map(|(a, b)| a.0.abs_diff(b.0) + a.1.abs_diff(b.1))
-                .max()
-                .unwrap() as f32;
+            // TODO: I think better heuristics than the volume exist.
+            // For instance, if we view the shape as a kind of graph (with what edges?), then its diameter might
+            // be admissible? Note that the maximum taxicab-distance is NOT admissible: Consider a U-shape, and a single-cell-shape.
+            // The actual diameter should be 5 (if the U-shape has volume 5), but the taxicab-maximum is 3.
+            let diam = minkowski_sum.len();
 
-            goal_diams.push(FloatOrd(1.0 / diam));
+            goal_diams.push(FloatOrd(1.0 / diam as f32));
         }
         minkowskiDiams.push(goal_diams)
     }
