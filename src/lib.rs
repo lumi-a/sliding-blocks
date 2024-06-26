@@ -608,6 +608,7 @@ pub fn solve_puzzle(start: &str, goal: &str) {
         extract_shapekey(&start_chartocoors, &goal_chartocoors);
 
     // TODO: Remove this
+    /*
     print_puzzle(
         &bounds,
         &shapekey,
@@ -616,6 +617,7 @@ pub fn solve_puzzle(start: &str, goal: &str) {
         width,
         height,
     );
+    */
 
     let nonintersectionkey = build_nonintersectionkey(&bounds, &shapekey, width, height);
 
@@ -648,7 +650,8 @@ pub fn solve_puzzle(start: &str, goal: &str) {
         );
     }
     */
-    println!("{}", path.len());
+    assert!(path.len() > 0);
+    assert!(path.len() < 1000);
 
     // TODO: Print path
 }
