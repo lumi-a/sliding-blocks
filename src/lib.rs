@@ -258,9 +258,14 @@ fn get_minkowski_diams(goal_shapekey_key: &GoalShapekeyKey, shapekey: &Shapekey)
         let mut goal_diams: Vec<Floaty> = Vec::new();
         for shape in shapekey {
             // TODO: the sum might overflow
+            // TODO: NONE of this actually is a minkowski-sum. Rename all variables
             let minkowski_sum: Shape = iproduct!(goal_shape, shape)
                 .map(|(a, b)| (a.0 + b.0, a.1 + b.1))
                 .collect();
+            println!(
+                "goalshape {:?} shape {:?} minkowski_sum: {:?}",
+                goal_shape, shape, minkowski_sum
+            );
 
             // TODO: I think this can be made to run in linear time w.r.t. |minkowski-sum|,
             // rather than quadratic.
@@ -329,18 +334,25 @@ fn heuristic(
     nonintersectionkey: &Nonintersectionkey,
     goal_shapekey_key: &GoalShapekeyKey,
     goal_target_offsets: &GoalTargetOffsets,
+    minkowskiDiams: &MinkowskiDiams,
     width: Coor,
     height: Coor,
 ) -> f32 {
-    blockstate
-        .goal_offsets
+    let nongoal_offsets = &blockstate.nongoal_offsets;
+    let goal_offsets = &blockstate.goal_offsets;
+    goal_offsets
         .iter()
         .enumerate()
         .map(|(goalvec_ix, current_goal_offset)| {
             let goal_shapeix = goal_shapekey_key[goalvec_ix];
-            let nik_goal = nonintersectionkey.get(goal_shapeix).unwrap();
+            let nik_goal = &nonintersectionkey[goal_shapeix];
+            let minkowskis_goal = &minkowskiDiams[goalvec_ix];
             let goal_target_offset = goal_target_offsets[goalvec_ix];
             let goal_target_offset_hack = (goal_target_offset.0 + 1, goal_target_offset.1 + 1);
+
+            // TODO: This dijkstra-search can be improved: Since only the vertices carry costs, we actually
+            // calculate them too often (since we calculate them again for each _edge_).
+            // I'm afraid you'll have to use another implementation of dijkstra for that, sorry.
             let (_, cost): (_, Floaty) = pathfinding::directed::dijkstra::dijkstra(
                 // TODO: This is a TERRIBLE hack that's only necessary because
                 // I didn't implement the "hey bounds and all coordinates should have a buffer of 1 to
@@ -366,7 +378,48 @@ fn heuristic(
                             && y <= height
                             && !nik_goal[x as usize - 1][y as usize - 1].is_empty();
                     })
-                    .map(|offset| (*offset, FloatOrd(1.0))) // TODO: implement actual sum
+                    .map(|offset| -> (Offset, Floaty) {
+                        (
+                            *offset, // new offset
+                            {
+                                let nongoal_sum: Floaty =
+                                    nongoal_offsets // cost
+                                        .iter()
+                                        .enumerate()
+                                        .map(|(shape_ix, offsets)| -> Floaty {
+                                            FloatOrd(
+                                                offsets
+                                                    .iter()
+                                                    .filter(|(x, y)| {
+                                                        !nik_goal[offset.0 as usize - 1]
+                                                            [offset.1 as usize - 1][shape_ix]
+                                                            [*x as usize]
+                                                            [*y as usize]
+                                                    })
+                                                    .count()
+                                                    as f32,
+                                            ) * minkowskis_goal[shape_ix]
+                                        })
+                                        .sum();
+
+                                let goal_sum: Floaty = goal_offsets
+                                    .iter()
+                                    .enumerate()
+                                    .filter(|(this_goal_ix, (x, y))| {
+                                        !nik_goal[offset.0 as usize - 1][offset.1 as usize - 1]
+                                            [goal_shapekey_key[*this_goal_ix]]
+                                            [*x as usize][*y as usize]
+                                            && *this_goal_ix != goalvec_ix
+                                    })
+                                    .map(|(this_goal_ix, _)| -> Floaty {
+                                        minkowskis_goal[goal_shapekey_key[this_goal_ix]]
+                                    })
+                                    .sum();
+
+                                nongoal_sum + goal_sum
+                            },
+                        )
+                    }) // TODO: implement actual sum
                     .collect_vec()
                 },
                 |goal_offset| *goal_offset == goal_target_offset_hack,
@@ -738,11 +791,19 @@ pub fn solve_puzzle_own_bfs(start: &str, goal: &str) {
         nonintersectionkey,
         goal_shapekey_key,
         goal_target_offsets,
-        minkowskiDiams,
+        minkowski_diams,
         width,
         height,
     ) = solve_puzzle_preprocessing(start, goal);
 
+    print_puzzle(
+        &bounds,
+        &shapekey,
+        &start_blockstate,
+        &goal_shapekey_key,
+        width,
+        height,
+    );
     println!(
         "{}",
         heuristic(
@@ -750,10 +811,13 @@ pub fn solve_puzzle_own_bfs(start: &str, goal: &str) {
             &nonintersectionkey,
             &goal_shapekey_key,
             &goal_target_offsets,
+            &minkowski_diams,
             width,
             height
         )
     );
+    println!("{:?}", minkowski_diams);
+    println!();
 
     /*
     let path = puzzle_bfs_with_path_reconstruction(
