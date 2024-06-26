@@ -329,6 +329,8 @@ fn heuristic(
     nonintersectionkey: &Nonintersectionkey,
     goal_shapekey_key: &GoalShapekeyKey,
     goal_target_offsets: &GoalTargetOffsets,
+    width: Coor,
+    height: Coor,
 ) -> f32 {
     blockstate
         .goal_offsets
@@ -336,10 +338,16 @@ fn heuristic(
         .enumerate()
         .map(|(goalvec_ix, current_goal_offset)| {
             let goal_shapeix = goal_shapekey_key[goalvec_ix];
-            let goal_target_offset = goal_target_offsets[goalvec_ix];
             let nik_goal = nonintersectionkey.get(goal_shapeix).unwrap();
+            let goal_target_offset = goal_target_offsets[goalvec_ix];
+            let goal_target_offset_hack = (goal_target_offset.0 + 1, goal_target_offset.1 + 1);
             let (_, cost): (_, Floaty) = pathfinding::directed::dijkstra::dijkstra(
-                current_goal_offset,
+                // TODO: This is a TERRIBLE hack that's only necessary because
+                // I didn't implement the "hey bounds and all coordinates should have a buffer of 1 to
+                // avoid checking against over- or underflows" fix yet:
+                // We shift everything by 1. I'm sorry.
+                // If you undo this, also undo goal_target_offset_hack to goal_target_offset
+                &(current_goal_offset.0 + 1, current_goal_offset.1 + 1),
                 |goal_offset| {
                     [
                         (goal_offset.0, goal_offset.1 + 1),
@@ -348,17 +356,26 @@ fn heuristic(
                         (goal_offset.0 - 1, goal_offset.1),
                     ]
                     .iter()
-                    .filter(|offset| !nik_goal[offset.0 as usize][offset.1 as usize].is_empty()) // TODO: This is a TERRIBLE hack to check whether offset is in-bounds
+                    .filter(|offset| {
+                        // TODO: This is a TERRIBLE hack to check whether offset is in-bounds
+                        let x = offset.0;
+                        let y = offset.1;
+                        return x > 0
+                            && y > 0
+                            && x <= width
+                            && y <= height
+                            && !nik_goal[x as usize - 1][y as usize - 1].is_empty();
+                    })
                     .map(|offset| (*offset, FloatOrd(1.0))) // TODO: implement actual sum
                     .collect_vec()
                 },
-                |goal_offset| *goal_offset == goal_target_offset,
+                |goal_offset| *goal_offset == goal_target_offset_hack,
             )
             .unwrap(); // TODO: This unwrap might very well fail in practice
             cost
         })
         .max()
-        .unwrap()
+        .unwrap() // TODO: Bad if we have no goal blocks
         .into()
 }
 
@@ -667,6 +684,7 @@ fn solve_puzzle_preprocessing(
     Nonintersectionkey,
     GoalShapekeyKey,
     GoalTargetOffsets,
+    MinkowskiDiams,
     Coor,
     Coor,
 ) {
@@ -703,6 +721,7 @@ fn solve_puzzle_preprocessing(
         nonintersectionkey,
         goal_shapekey_key,
         goal_target_offsets,
+        minkowskiDiams,
         width,
         height,
     )
@@ -719,10 +738,24 @@ pub fn solve_puzzle_own_bfs(start: &str, goal: &str) {
         nonintersectionkey,
         goal_shapekey_key,
         goal_target_offsets,
+        minkowskiDiams,
         width,
         height,
     ) = solve_puzzle_preprocessing(start, goal);
 
+    println!(
+        "{}",
+        heuristic(
+            &start_blockstate,
+            &nonintersectionkey,
+            &goal_shapekey_key,
+            &goal_target_offsets,
+            width,
+            height
+        )
+    );
+
+    /*
     let path = puzzle_bfs_with_path_reconstruction(
         &start_blockstate,
         |blockstate| {
@@ -739,6 +772,7 @@ pub fn solve_puzzle_own_bfs(start: &str, goal: &str) {
     .unwrap();
     assert!(path.len() > 0); // TODO: Remove this
     assert!(path.len() < 1000);
+    */
 }
 
 pub fn solve_puzzle_lib_bfs(start: &str, goal: &str) {
@@ -749,10 +783,12 @@ pub fn solve_puzzle_lib_bfs(start: &str, goal: &str) {
         nonintersectionkey,
         goal_shapekey_key,
         goal_target_offsets,
+        minkowskiDiams,
         width,
         height,
     ) = solve_puzzle_preprocessing(start, goal);
 
+    /*
     let path = pathfinding::directed::bfs::bfs(
         &start_blockstate,
         |blockstate| {
@@ -770,4 +806,5 @@ pub fn solve_puzzle_lib_bfs(start: &str, goal: &str) {
 
     assert!(path.len() > 0); // TODO: Remove this
     assert!(path.len() < 1000);
+    */
 }
