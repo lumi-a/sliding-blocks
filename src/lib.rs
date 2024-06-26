@@ -259,7 +259,7 @@ fn get_minkowski_diams(goal_shapekey_key: &GoalShapekeyKey, shapekey: &Shapekey)
         for shape in shapekey {
             // TODO: the sum might overflow
             // TODO: NONE of this actually is a minkowski-sum. Rename all variables
-            let minkowski_sum: BTreeSet<(isize, isize)> = iproduct!(goal_shape, goal_shape, shape)
+            let minkowski_sum: HashSet<(isize, isize)> = iproduct!(goal_shape, goal_shape, shape)
                 .map(|(g, dg, s)| {
                     (
                         g.0 as isize - dg.0 as isize + s.0 as isize,
@@ -272,11 +272,37 @@ fn get_minkowski_diams(goal_shapekey_key: &GoalShapekeyKey, shapekey: &Shapekey)
                 goal_shape, shape, minkowski_sum
             );
 
-            // TODO: I think better heuristics than the volume exist.
-            // For instance, if we view the shape as a kind of graph (with what edges?), then its diameter might
-            // be admissible? Note that the maximum taxicab-distance is NOT admissible: Consider a U-shape, and a single-cell-shape.
+            // Note that the maximum taxicab-distance is NOT admissible: Consider a U-shape, and a single-cell-shape.
             // The actual diameter should be 5 (if the U-shape has volume 5), but the taxicab-maximum is 3.
-            let diam = minkowski_sum.len();
+            // Instead, we'll calculate diameter of each of the connected components of the graph of the sum of the two shapes
+            // (where two cells are adjacent iff they're adjacent on the grid) and add 1.
+            let nodes: Vec<(isize, isize)> = minkowski_sum.iter().cloned().collect();
+            let connected_components =
+                pathfinding::undirected::connected_components::connected_components(
+                    &nodes,
+                    |(x, y)| -> Vec<(isize, isize)> {
+                        [(*x - 1, *y), (*x + 1, *y), (*x, *y - 1), (*x, *y + 1)]
+                            .iter()
+                            .filter(|a| minkowski_sum.contains(a))
+                            .cloned()
+                            .collect_vec()
+                    },
+                );
+            
+            println!("Connected components: {:?}", connected_components.len());
+            let diam: usize = connected_components.iter().map(|component|
+                // find diameter of component
+                iproduct!(component, component)
+                    .filter(|(v, w)| v>w) // Halves processing
+                    .map(|(v, w)| 
+                        pathfinding::directed::bfs::bfs(v, |(x, y)| -> Vec<(isize, isize)> {
+                            [(*x - 1, *y), (*x + 1, *y), (*x, *y - 1), (*x, *y + 1)]
+                                .iter()
+                                .filter(|a| component.contains(a))
+                                .cloned()
+                                .collect_vec()}, |u| u==w).unwrap().len()
+                    ).max().unwrap_or(0) + 1
+            ).sum();
 
             goal_diams.push(FloatOrd(1.0 / diam as f32));
         }
