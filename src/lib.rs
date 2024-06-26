@@ -1,6 +1,7 @@
 pub mod examples;
 
 use colored::{self, Colorize};
+use pathfinding;
 use std::cmp::{max, min, Ordering};
 use std::collections::hash_map::Entry::Occupied;
 use std::collections::hash_map::Entry::Vacant;
@@ -632,10 +633,10 @@ fn solve_puzzle_preprocessing(
     )
 }
 
-pub fn solve_puzzle(start: &str, goal: &str) {
-    // TODO: Implement A*
-    // TODO: Add tests
+// TODO: Implement A*
+// TODO: Add tests
 
+pub fn solve_puzzle_own_bfs(start: &str, goal: &str) {
     let (
         bounds,
         shapekey,
@@ -661,8 +662,37 @@ pub fn solve_puzzle(start: &str, goal: &str) {
         |blockstate| blockstate.goal_offsets == goal_target_offsets,
     )
     .unwrap();
-    assert!(path.len() > 0);
+    assert!(path.len() > 0); // TODO: Remove this
     assert!(path.len() < 1000);
+}
 
-    // TODO: Print path
+pub fn solve_puzzle_lib_bfs(start: &str, goal: &str) {
+    let (
+        bounds,
+        shapekey,
+        start_blockstate,
+        nonintersectionkey,
+        goal_shapekey_key,
+        goal_target_offsets,
+        width,
+        height,
+    ) = solve_puzzle_preprocessing(start, goal);
+
+    let path = pathfinding::directed::bfs::bfs(
+        &start_blockstate,
+        |blockstate| {
+            get_neighboring_blockstates(
+                &blockstate,
+                &nonintersectionkey,
+                &goal_shapekey_key,
+                width,
+                height,
+            )
+        },
+        |blockstate| blockstate.goal_offsets == goal_target_offsets,
+    )
+    .unwrap();
+
+    assert!(path.len() > 0); // TODO: Remove this
+    assert!(path.len() < 1000);
 }
