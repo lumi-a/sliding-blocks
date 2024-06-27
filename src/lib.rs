@@ -6,8 +6,8 @@ use ordered_float::OrderedFloat as FloatOrd;
 use std::cmp::{max, min, Ordering};
 use std::collections::hash_map::Entry::Occupied;
 use std::collections::hash_map::Entry::Vacant;
-use std::collections::HashMap;
-use std::collections::{BTreeSet, VecDeque};
+use std::collections::{BTreeSet, BinaryHeap, VecDeque};
+use std::collections::{HashMap, HashSet};
 
 // TODO: Perhaps it's better to abstract most of these into structs
 type Coor = u8;
@@ -482,6 +482,126 @@ fn heuristic(
         })
         .max()
         .unwrap() // TODO: Bad if we have no goal blocks
+}
+
+fn tighter_heuristic(
+    blockstate: &Blockstate,
+    nonintersectionkey: &Nonintersectionkey,
+    goal_shapekey_key: &GoalShapekeyKey,
+    goal_target_offsets: &GoalTargetOffsets,
+    width: Coor,
+    height: Coor,
+) -> Floaty {
+    let nongoal_offset_vec: Vec<Offset> = blockstate
+        .nongoal_offsets
+        .iter()
+        .flatten()
+        .cloned()
+        .collect();
+    let goal_offset_vec = blockstate.goal_offsets;
+
+    #[derive(Clone, PartialEq, Eq)]
+    struct OffsetAndPulverizedBlocks {
+        offset: Offset,
+        pulverized_blocks: BTreeSet<usize>, // i ∈ pulverized_blocks <=> we hit block (nongoal_offset_vec:goal_offset_vec)[i]
+    }
+    impl Ord for OffsetAndPulverizedBlocks {
+        // a < b iff:
+        // - a.pulverized_blocks ⊊ b.pulverized_blocks, or otherwise:
+        // - a.pulverized_blocks < b..pulverized_blocks in the set-universe of coordinates, or otherwise:
+        // - a.offset ≤ b.offset.
+        fn cmp(&self, other: &Self) -> Ordering {
+            std::cmp::Ordering::reverse({
+                // We want a min-heap, after all
+                let selfpb = &self.pulverized_blocks;
+                let otherpb = &other.pulverized_blocks;
+                if selfpb.is_subset(&otherpb) && selfpb != otherpb {
+                    std::cmp::Ordering::Less
+                } else if otherpb.is_subset(&selfpb) && selfpb != otherpb {
+                    std::cmp::Ordering::Greater
+                } else {
+                    let selfiter = selfpb.iter();
+                    let otheriter = otherpb.iter();
+                    // comparison-sweep:
+                    selfiter
+                        .zip(otheriter)
+                        .map(|(i, j)| i.cmp(j))
+                        .find(|&cmp| cmp != std::cmp::Ordering::Equal)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                        .then(self.offset.cmp(&other.offset))
+                }
+            })
+        }
+    }
+    impl PartialOrd for OffsetAndPulverizedBlocks {
+        fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+            Some(self.cmp(other))
+        }
+    }
+
+    let pulverized_bfs = |goalvec_ix: usize| -> usize {
+        let target_goal_offset = goal_target_offsets[goalvec_ix];
+        let mut seen_offsets: BTreeSet<Offset> = BTreeSet::new();
+        let mut stack: Vec<OffsetAndPulverizedBlocks> = vec![OffsetAndPulverizedBlocks {
+            offset: goal_offset_vec[goalvec_ix],
+            pulverized_blocks: BTreeSet::new(),
+        }];
+        while let Some(OffsetAndPulverizedBlocks {
+            offset,
+            pulverized_blocks,
+        }) = stack.pop()
+        {
+            let pulverized_count = pulverized_blocks.len();
+            if offset == target_goal_offset {
+                return pulverized_count;
+            }
+
+            // TODO: This is AWFUL code.
+            // And no, we can't just extract the array into match-arms and for-loop
+            // over the match-result, because arrays of different length are
+            // different types
+            // Should we extend the intersection-vector to reach one more cell? Hmm
+            let inserty = |new_offset: Offset| {
+                if new_offset.0 < width && new_offset.1 < height {
+                    panic!("TODO: Iterate over new blocks you may hit now");
+
+                    //&& seen_offsets.insert(new_offset)
+                    //&& is_legal(new_offset)
+                    legal_offsets.push(new_offset);
+                    stack.push(new_offset);
+                }
+            };
+            // TODO: I hate this
+            if offset.0 > 0 {
+                if offset.1 > 0 {
+                    [
+                        (offset.0, offset.1 + 1),
+                        (offset.0 + 1, offset.1),
+                        (offset.0, offset.1 - 1),
+                        (offset.0 - 1, offset.1),
+                    ]
+                    .map(inserty);
+                } else {
+                    [
+                        (offset.0, offset.1 + 1),
+                        (offset.0 + 1, offset.1),
+                        (offset.0 - 1, offset.1),
+                    ]
+                    .map(inserty);
+                }
+            } else if offset.1 > 0 {
+                [
+                    (offset.0, offset.1 + 1),
+                    (offset.0 + 1, offset.1),
+                    (offset.0, offset.1 - 1),
+                ]
+                .map(inserty);
+            } else {
+                [(offset.0, offset.1 + 1), (offset.0 + 1, offset.1)].map(inserty);
+            }
+        }
+        legal_offsets
+    };
 }
 
 fn get_neighboring_blockstates(
