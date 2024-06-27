@@ -254,23 +254,38 @@ fn extract_shapekey(
 fn get_minkowski_diams(goal_shapekey_key: &GoalShapekeyKey, shapekey: &Shapekey) -> MinkowskiDiams {
     let mut minkowskiDiams = MinkowskiDiams::new();
     for goalvec_ix in goal_shapekey_key.iter() {
-        let goal_shape = shapekey.get(*goalvec_ix).unwrap();
+        let goal_shape: BTreeSet<(isize, isize)> = shapekey[*goalvec_ix]
+            .iter()
+            .map(|(x, y)| (*x as isize, *y as isize))
+            .collect();
+        let goal_max_x = *goal_shape.iter().map(|(x, _)| x).max().unwrap(); // TODO: Two iterations, kinda inefficient
+        let goal_max_y = *goal_shape.iter().map(|(_, y)| y).max().unwrap(); // We could finally extract this into a function?
         let mut goal_diams: Vec<Floaty> = Vec::new();
         for shape in shapekey {
-            // TODO: the sum might overflow
-            // TODO: NONE of this actually is a minkowski-sum. Rename all variables
-            let minkowski_sum: HashSet<(isize, isize)> = iproduct!(goal_shape, goal_shape, shape)
-                .map(|(g, dg, s)| {
-                    (
-                        g.0 as isize - dg.0 as isize + s.0 as isize,
-                        g.1 as isize - dg.1 as isize + s.1 as isize,
-                    )
-                })
+            let shape: BTreeSet<(isize, isize)> = shape
+                .iter()
+                .map(|(x, y)| (*x as isize, *y as isize))
                 .collect();
-            println!(
-                "goalshape {:?} shape {:?} minkowski_sum: {:?}",
-                goal_shape, shape, minkowski_sum
-            );
+            let shape_max_x = *shape.iter().map(|(x, _)| x).max().unwrap(); // TODO: Two iterations, kinda inefficient
+            let shape_max_y = *shape.iter().map(|(_, y)| y).max().unwrap(); // We could finally extract this into a function?
+                                                                            // TODO: NONE of this actually is a minkowski-sum. Rename all variables
+            let mut minkowski_sum: BTreeSet<(isize, isize)> = BTreeSet::new();
+            // The loop-variables dx, dy denote the offset of goal_shape.
+            // We'll add (goal_shape + offset) to minkowski_sum iff
+            // (goal_shape + offset) intersects shape. For that, looping over [(-goal_max_x)..=shape_max_x]
+            // suffices (as oppposed to (-width..=width) or something), which I hope you can
+            // visualise in your head.
+            // TODO: Could we actually loop over an even smaller set?
+            for dx in (-goal_max_x)..=shape_max_x {
+                for dy in (-goal_max_y)..=shape_max_y {
+                    let moved_goal_shape: BTreeSet<(isize, isize)> =
+                        goal_shape.iter().map(|(x, y)| (x + dx, y + dy)).collect();
+                    if moved_goal_shape.intersection(&shape).count() > 0 {
+                        // TODO: How inefficient in this?
+                        minkowski_sum = minkowski_sum.union(&moved_goal_shape).cloned().collect();
+                    }
+                }
+            }
 
             // Note that the maximum taxicab-distance is NOT admissible: Consider a U-shape, and a single-cell-shape.
             // The actual diameter should be 5 (if the U-shape has volume 5), but the taxicab-maximum is 3.
@@ -288,21 +303,34 @@ fn get_minkowski_diams(goal_shapekey_key: &GoalShapekeyKey, shapekey: &Shapekey)
                             .collect_vec()
                     },
                 );
-            
-            println!("Connected components: {:?}", connected_components.len());
-            let diam: usize = connected_components.iter().map(|component|
-                // find diameter of component
-                iproduct!(component, component)
-                    .filter(|(v, w)| v>w) // Halves processing
-                    .map(|(v, w)| 
-                        pathfinding::directed::bfs::bfs(v, |(x, y)| -> Vec<(isize, isize)> {
-                            [(*x - 1, *y), (*x + 1, *y), (*x, *y - 1), (*x, *y + 1)]
-                                .iter()
-                                .filter(|a| component.contains(a))
-                                .cloned()
-                                .collect_vec()}, |u| u==w).unwrap().len()
-                    ).max().unwrap_or(0) + 1
-            ).sum();
+
+            let diam: usize = connected_components
+                .iter()
+                .map(|component| {
+                    // find diameter of component
+                    iproduct!(component, component)
+                        .filter(|(v, w)| v > w) // Halves processing
+                        .map(|(v, w)| {
+                            pathfinding::directed::bfs::bfs(
+                                v,
+                                |(x, y)| -> Vec<(isize, isize)> {
+                                    [(*x - 1, *y), (*x + 1, *y), (*x, *y - 1), (*x, *y + 1)]
+                                        .iter()
+                                        .filter(|a| component.contains(a))
+                                        .cloned()
+                                        .collect_vec()
+                                },
+                                |u| u == w,
+                            )
+                            .unwrap()
+                            .len()
+                                - 2 // Subtraction will never overflow, because v!=w
+                        })
+                        .max()
+                        .unwrap_or(1)
+                })
+                .sum();
+            println!("goalshape {:?} shape {:?} minkowski_sum: {:?} Connected components: {:?}, diam: {:?}", goal_shape, shape, minkowski_sum, connected_components.len(), diam);
 
             goal_diams.push(FloatOrd(1.0 / diam as f32));
         }
@@ -364,10 +392,11 @@ fn heuristic(
     nonintersectionkey: &Nonintersectionkey,
     goal_shapekey_key: &GoalShapekeyKey,
     goal_target_offsets: &GoalTargetOffsets,
-    minkowskiDiams: &MinkowskiDiams,
+    minkowski_diams: &MinkowskiDiams,
     width: Coor,
     height: Coor,
 ) -> f32 {
+    // TODO: Prove this is admissible
     let nongoal_offsets = &blockstate.nongoal_offsets;
     let goal_offsets = &blockstate.goal_offsets;
     goal_offsets
@@ -376,7 +405,7 @@ fn heuristic(
         .map(|(goalvec_ix, current_goal_offset)| {
             let goal_shapeix = goal_shapekey_key[goalvec_ix];
             let nik_goal = &nonintersectionkey[goal_shapeix];
-            let minkowskis_goal = &minkowskiDiams[goalvec_ix];
+            let minkowskis_goal = &minkowski_diams[goalvec_ix];
             let goal_target_offset = goal_target_offsets[goalvec_ix];
             let goal_target_offset_hack = (goal_target_offset.0 + 1, goal_target_offset.1 + 1);
 
