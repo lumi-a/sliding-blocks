@@ -3,12 +3,10 @@ pub mod examples;
 use colored::{self, Colorize};
 use itertools::{iproduct, Itertools};
 use ordered_float::OrderedFloat as FloatOrd;
-use pathfinding;
 use std::cmp::{max, min, Ordering};
 use std::collections::hash_map::Entry::Occupied;
 use std::collections::hash_map::Entry::Vacant;
 use std::collections::HashMap;
-use std::collections::HashSet;
 use std::collections::{BTreeSet, VecDeque};
 
 // TODO: Perhaps it's better to abstract most of these into structs
@@ -37,7 +35,7 @@ type Floaty = FloatOrd<f32>; // I *need* a total order on floats, *please*
 
 type MinkowskiDiams = Vec<Vec<Floaty>>; // Given an index in the Blockstate.goal_blocks vec, and an index of its shape in the shapekey vec, what is the diameter of the minkowski sum of the two shapes? Used for heuristic.
 
-fn intersect_coortables(a: &Coortable<bool>, b: &Coortable<bool>) -> Coortable<bool> {
+fn _intersect_coortables(a: &Coortable<bool>, b: &Coortable<bool>) -> Coortable<bool> {
     a.iter()
         .zip(b)
         .map(|(row_a, row_b)| {
@@ -98,10 +96,7 @@ fn string_to_chartocoors(s: &str) -> (CharToCoors, Coor, Coor) {
     let mut chartocoors: CharToCoors = CharToCoors::new();
     for (c, coor) in temp_coords {
         let shifted_coor = (coor.0 - shift.0, coor.1 - shift.1);
-        chartocoors
-            .entry(c)
-            .or_insert_with(CoordinatesSet::new)
-            .insert(shifted_coor);
+        chartocoors.entry(c).or_default().insert(shifted_coor);
     }
 
     (chartocoors, width, height)
@@ -156,7 +151,7 @@ fn extract_shapekey(
 
         shape_to_chars_and_offsets
             .entry(shape)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push((*c, (min_x, min_y)));
         if let Some(goal_coords) = goal_chartocoors.get(c) {
             // TODO: Because we're currently in the start-loop, and won't separately
@@ -226,20 +221,20 @@ fn extract_shapekey(
             .map(|(_, chars_and_offsets)| {
                 chars_and_offsets
                     .iter()
-                    .filter(|(c, _)| !goal_chartocoors.get(c).is_some())
-                    .map(|(_, offset)| offset.clone())
+                    .filter(|(c, _)| goal_chartocoors.get(c).is_none())
+                    .map(|(_, offset)| *offset)
                     .collect()
             })
             .filter(|offsets: &Offsets| !offsets.is_empty())
             .collect(),
         goal_offsets: goal_chars_startoff_targetoff
             .iter()
-            .map(|(_, start, _)| start.clone())
+            .map(|(_, start, _)| *start)
             .collect(),
     };
     let goal_target_offsets = goal_chars_startoff_targetoff
         .iter()
-        .map(|(_, _, target)| target.clone())
+        .map(|(_, _, target)| *target)
         .collect();
 
     (
@@ -252,7 +247,7 @@ fn extract_shapekey(
 }
 
 fn get_minkowski_diams(goal_shapekey_key: &GoalShapekeyKey, shapekey: &Shapekey) -> MinkowskiDiams {
-    let mut minkowskiDiams = MinkowskiDiams::new();
+    let mut minkowski_diams = MinkowskiDiams::new();
     for goalvec_ix in goal_shapekey_key.iter() {
         let goal_shape: BTreeSet<(isize, isize)> = shapekey[*goalvec_ix]
             .iter()
@@ -330,13 +325,12 @@ fn get_minkowski_diams(goal_shapekey_key: &GoalShapekeyKey, shapekey: &Shapekey)
                         .unwrap_or(1)
                 })
                 .sum();
-            println!("goalshape {:?} shape {:?} minkowski_sum: {:?} Connected components: {:?}, diam: {:?}", goal_shape, shape, minkowski_sum, connected_components.len(), diam);
 
             goal_diams.push(FloatOrd(1.0 / diam as f32));
         }
-        minkowskiDiams.push(goal_diams)
+        minkowski_diams.push(goal_diams)
     }
-    minkowskiDiams
+    minkowski_diams
 }
 
 fn build_nonintersectionkey(
@@ -395,7 +389,7 @@ fn heuristic(
     minkowski_diams: &MinkowskiDiams,
     width: Coor,
     height: Coor,
-) -> f32 {
+) -> Floaty {
     // TODO: Prove this is admissible
     let nongoal_offsets = &blockstate.nongoal_offsets;
     let goal_offsets = &blockstate.goal_offsets;
@@ -431,11 +425,11 @@ fn heuristic(
                         // TODO: This is a TERRIBLE hack to check whether offset is in-bounds
                         let x = offset.0;
                         let y = offset.1;
-                        return x > 0
+                        x > 0
                             && y > 0
                             && x <= width
                             && y <= height
-                            && !nik_goal[x as usize - 1][y as usize - 1].is_empty();
+                            && !nik_goal[x as usize - 1][y as usize - 1].is_empty()
                     })
                     .map(|offset| -> (Offset, Floaty) {
                         (
@@ -488,7 +482,6 @@ fn heuristic(
         })
         .max()
         .unwrap() // TODO: Bad if we have no goal blocks
-        .into()
 }
 
 fn get_neighboring_blockstates(
@@ -532,9 +525,7 @@ fn get_neighboring_blockstates(
         let mut seen_offsets: BTreeSet<Offset> = BTreeSet::new();
         seen_offsets.insert(initial_offset);
         let mut stack: Vec<Offset> = vec![initial_offset];
-        while !stack.is_empty() {
-            let offset = stack.pop().unwrap();
-
+        while let Some(offset) = stack.pop() {
             // TODO: Maybe this can be made faster by not going back in
             // the direction we just came from
 
@@ -571,17 +562,15 @@ fn get_neighboring_blockstates(
                     ]
                     .map(inserty);
                 }
+            } else if offset.1 > 0 {
+                [
+                    (offset.0, offset.1 + 1),
+                    (offset.0 + 1, offset.1),
+                    (offset.0, offset.1 - 1),
+                ]
+                .map(inserty);
             } else {
-                if offset.1 > 0 {
-                    [
-                        (offset.0, offset.1 + 1),
-                        (offset.0 + 1, offset.1),
-                        (offset.0, offset.1 - 1),
-                    ]
-                    .map(inserty);
-                } else {
-                    [(offset.0, offset.1 + 1), (offset.0 + 1, offset.1)].map(inserty);
-                }
+                [(offset.0, offset.1 + 1), (offset.0 + 1, offset.1)].map(inserty);
             }
         }
 
@@ -820,11 +809,8 @@ fn solve_puzzle_preprocessing(
 
     let (bounds, shapekey, start_blockstate, goal_shapekey_key, goal_target_offsets) =
         extract_shapekey(&start_chartocoors, &goal_chartocoors);
-    println!("Starting Minkowski.");
-    let minkowskiDiams = get_minkowski_diams(&goal_shapekey_key, &shapekey);
-    println!("Starting Nik.");
+    let minkowski_diams = get_minkowski_diams(&goal_shapekey_key, &shapekey);
     let nonintersectionkey = build_nonintersectionkey(&bounds, &shapekey, width, height);
-    println!("Starting Search.");
 
     (
         bounds,
@@ -833,7 +819,7 @@ fn solve_puzzle_preprocessing(
         nonintersectionkey,
         goal_shapekey_key,
         goal_target_offsets,
-        minkowskiDiams,
+        minkowski_diams,
         width,
         height,
     )
@@ -850,7 +836,7 @@ pub fn solve_puzzle_own_bfs(start: &str, goal: &str) {
         nonintersectionkey,
         goal_shapekey_key,
         goal_target_offsets,
-        minkowski_diams,
+        _minkowski_diams,
         width,
         height,
     ) = solve_puzzle_preprocessing(start, goal);
@@ -863,27 +849,13 @@ pub fn solve_puzzle_own_bfs(start: &str, goal: &str) {
         width,
         height,
     );
-    println!(
-        "{}",
-        heuristic(
-            &start_blockstate,
-            &nonintersectionkey,
-            &goal_shapekey_key,
-            &goal_target_offsets,
-            &minkowski_diams,
-            width,
-            height
-        )
-    );
-    println!("{:?}", minkowski_diams);
     println!();
 
-    /*
     let path = puzzle_bfs_with_path_reconstruction(
         &start_blockstate,
         |blockstate| {
             get_neighboring_blockstates(
-                &blockstate,
+                blockstate,
                 &nonintersectionkey,
                 &goal_shapekey_key,
                 width,
@@ -893,30 +865,27 @@ pub fn solve_puzzle_own_bfs(start: &str, goal: &str) {
         |blockstate| blockstate.goal_offsets == goal_target_offsets,
     )
     .unwrap();
-    assert!(path.len() > 0); // TODO: Remove this
-    assert!(path.len() < 1000);
-    */
+    assert!(path.len() < 1000); // TODO: Remove this
 }
 
 pub fn solve_puzzle_lib_bfs(start: &str, goal: &str) {
     let (
-        bounds,
-        shapekey,
+        _bounds,
+        _shapekey,
         start_blockstate,
         nonintersectionkey,
         goal_shapekey_key,
         goal_target_offsets,
-        minkowskiDiams,
+        _minkowski_diams,
         width,
         height,
     ) = solve_puzzle_preprocessing(start, goal);
 
-    /*
     let path = pathfinding::directed::bfs::bfs(
         &start_blockstate,
         |blockstate| {
             get_neighboring_blockstates(
-                &blockstate,
+                blockstate,
                 &nonintersectionkey,
                 &goal_shapekey_key,
                 width,
@@ -927,7 +896,50 @@ pub fn solve_puzzle_lib_bfs(start: &str, goal: &str) {
     )
     .unwrap();
 
-    assert!(path.len() > 0); // TODO: Remove this
-    assert!(path.len() < 1000);
-    */
+    assert!(path.len() < 1000); // TODO: Remove this
+}
+
+pub fn solve_puzzle_astar(start: &str, goal: &str) {
+    let (
+        _bounds,
+        _shapekey,
+        start_blockstate,
+        nonintersectionkey,
+        goal_shapekey_key,
+        goal_target_offsets,
+        minkowski_diams,
+        width,
+        height,
+    ) = solve_puzzle_preprocessing(start, goal);
+
+    let (path, _) = pathfinding::directed::astar::astar(
+        &start_blockstate,
+        |blockstate| -> Vec<(Blockstate, Floaty)> {
+            get_neighboring_blockstates(
+                blockstate,
+                &nonintersectionkey,
+                &goal_shapekey_key,
+                width,
+                height,
+            )
+            .iter()
+            .map(|blockstate| (blockstate.clone(), FloatOrd(1.0))) // TODO: This is horrible?
+            .collect()
+        },
+        |blockstate| {
+            heuristic(
+                blockstate,
+                &nonintersectionkey,
+                &goal_shapekey_key,
+                &goal_target_offsets,
+                &minkowski_diams,
+                width,
+                height,
+            )
+        },
+        |blockstate| blockstate.goal_offsets == goal_target_offsets,
+    )
+    .unwrap();
+
+    assert!(path.len() < 1000); // TODO: Remove this
 }
