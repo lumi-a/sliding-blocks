@@ -500,46 +500,61 @@ fn tighter_heuristic(
         .collect();
     let goal_offset_vec = blockstate.goal_offsets;
 
-    #[derive(Clone, PartialEq, Eq)]
-    struct OffsetAndPulverizedBlocks {
-        offset: Offset,
-        pulverized_blocks: BTreeSet<usize>, // i ∈ pulverized_blocks <=> we hit block (nongoal_offset_vec:goal_offset_vec)[i]
-    }
-    impl Ord for OffsetAndPulverizedBlocks {
-        // a < b iff:
-        // - a.pulverized_blocks ⊊ b.pulverized_blocks, or otherwise:
-        // - a.pulverized_blocks < b..pulverized_blocks in the set-universe of coordinates, or otherwise:
-        // - a.offset ≤ b.offset.
-        fn cmp(&self, other: &Self) -> Ordering {
-            std::cmp::Ordering::reverse({
-                // We want a min-heap, after all
-                let selfpb = &self.pulverized_blocks;
-                let otherpb = &other.pulverized_blocks;
-                if selfpb.is_subset(&otherpb) && selfpb != otherpb {
-                    std::cmp::Ordering::Less
-                } else if otherpb.is_subset(&selfpb) && selfpb != otherpb {
-                    std::cmp::Ordering::Greater
-                } else {
-                    let selfiter = selfpb.iter();
-                    let otheriter = otherpb.iter();
-                    // comparison-sweep:
-                    selfiter
-                        .zip(otheriter)
-                        .map(|(i, j)| i.cmp(j))
-                        .find(|&cmp| cmp != std::cmp::Ordering::Equal)
-                        .unwrap_or(std::cmp::Ordering::Equal)
-                        .then(self.offset.cmp(&other.offset))
-                }
-            })
-        }
-    }
-    impl PartialOrd for OffsetAndPulverizedBlocks {
-        fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-            Some(self.cmp(other))
-        }
+    #[derive(PartialEq, Eq)]
+    struct Hypervertex {
+        pulverized_blocks: BTreeSet<usize>, // i ∈ pulverized_blocks <=> block (nongoal_offset_vec:goal_offset_vec)[i] is translucent
+        offsets: Offsets, // Offsets that are possible to reach while pulverized_blocks are translucent
+        fringe: Vec<Offset>, // Subset of offsets. Contains an offset iff it has in-bounds neighbour-offset that can't be accessed without pulverizing more blocks
     }
 
     let pulverized_bfs = |goalvec_ix: usize| -> usize {
+        let sub_bfs = |&Hypervertex{ pulverized_blocks, offsets, fringe}, newly_pulverized: usize| -> Vec<Hypervertex> {
+            let mut new_pulverized_blocks = pulverized_blocks.clone();
+            new_pulverized_blocks.insert(newly_pulverized);
+            let mut seen_offsets: Offsets = offsets.clone();
+            let mut stack: Vec<Offset> = fringe.clone();
+            let mut new_fringe: Vec<Offset> = Vec::new();
+            while let Some(offset) = stack.pop() {
+                let inserty = |new_offset: Offset| {
+                    if new_offset.0 < width && new_offset.1 < height {
+                        panic!("TODO: Iterate over new blocks you may hit now");
+    
+                        //&& seen_offsets.insert(new_offset)
+                        //&& is_legal(new_offset)
+                        legal_offsets.push(new_offset);
+                        stack.push(new_offset);
+                    }
+                };
+                // TODO: I hate this
+                if offset.0 > 0 {
+                    if offset.1 > 0 {
+                        [
+                            (offset.0, offset.1 + 1),
+                            (offset.0 + 1, offset.1),
+                            (offset.0, offset.1 - 1),
+                            (offset.0 - 1, offset.1),
+                        ]
+                        .map(inserty);
+                    } else {
+                        [
+                            (offset.0, offset.1 + 1),
+                            (offset.0 + 1, offset.1),
+                            (offset.0 - 1, offset.1),
+                        ]
+                        .map(inserty);
+                    }
+                } else if offset.1 > 0 {
+                    [
+                        (offset.0, offset.1 + 1),
+                        (offset.0 + 1, offset.1),
+                        (offset.0, offset.1 - 1),
+                    ]
+                    .map(inserty);
+                } else {
+                    [(offset.0, offset.1 + 1), (offset.0 + 1, offset.1)].map(inserty);
+                }
+            }
+        }
         let target_goal_offset = goal_target_offsets[goalvec_ix];
         let mut seen_offsets: BTreeSet<Offset> = BTreeSet::new();
         let mut stack: Vec<OffsetAndPulverizedBlocks> = vec![OffsetAndPulverizedBlocks {
