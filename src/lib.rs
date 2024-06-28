@@ -238,12 +238,12 @@ fn extract_shapekey(
             .collect(),
         goal_offsets: goal_chars_startoffset_targetoffset
             .iter()
-            .map(|(_, start, _)| *start)
+            .map(|(_, start, _)| start.clone())
             .collect(),
     };
     let goal_target_offsets = goal_chars_startoffset_targetoffset
         .iter()
-        .map(|(_, _, target)| *target)
+        .map(|(_, _, target)| target.clone())
         .collect();
 
     (
@@ -260,7 +260,7 @@ fn get_minkowski_diams(goal_shapekey_key: &GoalShapekeyKey, shapekey: &Shapekey)
     for goalvec_ix in goal_shapekey_key.iter() {
         let goal_shape: BTreeSet<(isize, isize)> = shapekey[*goalvec_ix]
             .iter()
-            .map(|(x, y)| (*x as isize, *y as isize))
+            .map(|Point(x, y)| (*x as isize, *y as isize))
             .collect();
         let goal_max_x = *goal_shape.iter().map(|(x, _)| x).max().unwrap(); // TODO: Two iterations, kinda inefficient
         let goal_max_y = *goal_shape.iter().map(|(_, y)| y).max().unwrap(); // We could finally extract this into a function?
@@ -268,11 +268,12 @@ fn get_minkowski_diams(goal_shapekey_key: &GoalShapekeyKey, shapekey: &Shapekey)
         for shape in shapekey {
             let shape: BTreeSet<(isize, isize)> = shape
                 .iter()
-                .map(|(x, y)| (*x as isize, *y as isize))
+                .map(|Point(x, y)| (*x as isize, *y as isize))
                 .collect();
             let shape_max_x = *shape.iter().map(|(x, _)| x).max().unwrap(); // TODO: Two iterations, kinda inefficient
             let shape_max_y = *shape.iter().map(|(_, y)| y).max().unwrap(); // We could finally extract this into a function?
-                                                                            // TODO: NONE of this actually is a minkowski-sum. Rename all variables
+            
+            // TODO: NONE of this actually is a minkowski-sum. Rename all variables
             let mut minkowski_sum: BTreeSet<(isize, isize)> = BTreeSet::new();
             // The loop-variables dx, dy denote the offset of goal_shape.
             // We'll add (goal_shape + offset) to minkowski_sum iff
@@ -411,40 +412,25 @@ fn heuristic(
             let goal_shapeix = goal_shapekey_key[goalvec_ix];
             let nik_goal = &nonintersectionkey[goal_shapeix];
             let minkowskis_goal = &minkowski_diams[goalvec_ix];
-            let goal_target_offset = goal_target_offsets[goalvec_ix];
-            let goal_target_offset_hack = (goal_target_offset.0 + 1, goal_target_offset.1 + 1);
+            let goal_target_offset = &goal_target_offsets[goalvec_ix];
 
             // TODO: This dijkstra-search can be improved: Since only the vertices carry costs, we actually
             // calculate them too often (since we calculate them again for each _edge_).
             // I'm afraid you'll have to use another implementation of dijkstra for that, sorry.
             let (_, cost): (_, Floaty) = pathfinding::directed::dijkstra::dijkstra(
-                // TODO: This is a TERRIBLE hack that's only necessary because
-                // I didn't implement the "hey bounds and all coordinates should have a buffer of 1 to
-                // avoid checking against over- or underflows" fix yet:
-                // We shift everything by 1. I'm sorry.
-                // If you undo this, also undo goal_target_offset_hack to goal_target_offset
-                &(current_goal_offset.0 + 1, current_goal_offset.1 + 1),
+                current_goal_offset,
                 |goal_offset| {
-                    [
-                        (goal_offset.0, goal_offset.1 + 1),
-                        (goal_offset.0 + 1, goal_offset.1),
-                        (goal_offset.0, goal_offset.1 - 1),
-                        (goal_offset.0 - 1, goal_offset.1),
-                    ]
+                    [goal_offset.up(), goal_offset.down(), goal_offset.left(), goal_offset.right()]
                     .iter()
                     .filter(|offset| {
                         // TODO: This is a TERRIBLE hack to check whether offset is in-bounds
                         let x = offset.0;
                         let y = offset.1;
-                        x > 0
-                            && y > 0
-                            && x <= width
-                            && y <= height
-                            && !nik_goal[x as usize - 1][y as usize - 1].is_empty()
+                        nik_goal[x as usize - 1][y as usize - 1].is_empty()
                     })
                     .map(|offset| -> (Offset, Floaty) {
                         (
-                            *offset, // new offset
+                            offset.clone(), // new offset
                             {
                                 let nongoal_sum: Floaty =
                                     nongoal_offsets // cost
@@ -454,7 +440,7 @@ fn heuristic(
                                             FloatOrd(
                                                 offsets
                                                     .iter()
-                                                    .filter(|(x, y)| {
+                                                    .filter(|Offset(x, y)| {
                                                         !nik_goal[offset.0 as usize - 1]
                                                             [offset.1 as usize - 1][shape_ix]
                                                             [*x as usize]
@@ -469,7 +455,7 @@ fn heuristic(
                                 let goal_sum: Floaty = goal_offsets
                                     .iter()
                                     .enumerate()
-                                    .filter(|(this_goal_ix, (x, y))| {
+                                    .filter(|(this_goal_ix, Offset(x, y))| {
                                         !nik_goal[offset.0 as usize - 1][offset.1 as usize - 1]
                                             [goal_shapekey_key[*this_goal_ix]]
                                             [*x as usize][*y as usize]
@@ -486,7 +472,7 @@ fn heuristic(
                     }) // TODO: implement actual sum
                     .collect_vec()
                 },
-                |goal_offset| *goal_offset == goal_target_offset_hack,
+                |goal_offset| *goal_offset == *goal_target_offset,
             )
             .unwrap(); // TODO: This unwrap might very well fail in practice
             cost
@@ -525,46 +511,6 @@ fn tighter_heuristic(
             let mut seen_offsets: Offsets = offsets.clone();
             let mut stack: Vec<Offset> = fringe.clone();
             let mut new_fringe: Vec<Offset> = Vec::new();
-            while let Some(offset) = stack.pop() {
-                let inserty = |new_offset: Offset| {
-                    if new_offset.0 < width && new_offset.1 < height {
-                        panic!("TODO: Iterate over new blocks you may hit now");
-    
-                        //&& seen_offsets.insert(new_offset)
-                        //&& is_legal(new_offset)
-                        legal_offsets.push(new_offset);
-                        stack.push(new_offset);
-                    }
-                };
-                // TODO: I hate this
-                if offset.0 > 0 {
-                    if offset.1 > 0 {
-                        [
-                            (offset.0, offset.1 + 1),
-                            (offset.0 + 1, offset.1),
-                            (offset.0, offset.1 - 1),
-                            (offset.0 - 1, offset.1),
-                        ]
-                        .map(inserty);
-                    } else {
-                        [
-                            (offset.0, offset.1 + 1),
-                            (offset.0 + 1, offset.1),
-                            (offset.0 - 1, offset.1),
-                        ]
-                        .map(inserty);
-                    }
-                } else if offset.1 > 0 {
-                    [
-                        (offset.0, offset.1 + 1),
-                        (offset.0 + 1, offset.1),
-                        (offset.0, offset.1 - 1),
-                    ]
-                    .map(inserty);
-                } else {
-                    [(offset.0, offset.1 + 1), (offset.0 + 1, offset.1)].map(inserty);
-                }
-            }
         }
         let target_goal_offset = goal_target_offsets[goalvec_ix];
         let mut seen_offsets: BTreeSet<Offset> = BTreeSet::new();
