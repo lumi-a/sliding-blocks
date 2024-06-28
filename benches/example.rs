@@ -1,6 +1,6 @@
 #![allow(unused)]
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
-use sliding_blocks::{examples, solve_puzzle_astar, solve_puzzle_lib_bfs};
+use sliding_blocks::{examples, solve_puzzle_astar, solve_puzzle_bfs};
 
 pub fn criterion_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("Examples");
@@ -11,7 +11,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         ("GARBAGE_DISPOSAL", examples::GARBAGE_DISPOSAL),
     ] {
         group.bench_with_input(BenchmarkId::new("lib_bfs", name), &puzzle, |b, p| {
-            b.iter(|| solve_puzzle_lib_bfs(p.start, p.goal))
+            b.iter(|| solve_puzzle_bfs(p.start, p.goal))
         });
         group.bench_with_input(BenchmarkId::new("astar", name), &puzzle, |b, p| {
             b.iter(|| solve_puzzle_astar(p.start, p.goal))
