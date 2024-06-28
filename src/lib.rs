@@ -11,14 +11,49 @@ use std::collections::{BTreeSet, VecDeque};
 
 // TODO: Perhaps it's better to abstract most of these into structs
 type Coor = u8;
-type Coordinates = (Coor, Coor);
+type Width = Coor;
+type Height = Coor;
 
-type CoordinatesSet = BTreeSet<Coordinates>;
-type CharToCoors = HashMap<char, CoordinatesSet>;
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+struct Point(Coor, Coor);
+impl std::ops::Add for Point {
+    type Output = Self;
+    fn add(self, other: Self) -> Self {
+        Self(self.0 + other.0, self.1 + other.1)
+    }
+}
 
-type Shape = BTreeSet<Coordinates>;
-type Bounds = Shape;
-type Offset = (Coor, Coor);
+type Points = BTreeSet<Point>;
+type CharToPoints = HashMap<char, Points>;
+
+type Shape = BTreeSet<Point>; // nonempty. min-x == 0, min-y == 0
+                              // TODO: Make this a struct method?
+fn get_extremes(coordinates_set: &Points) -> (Coor, Coor, Coor, Coor) {
+    // Extract min-x and min-y.
+    // Assumes that coordinatesSet is nonempty.
+    // TODO: Is that a misassumption?
+    let mut min_x = Coor::MAX;
+    let mut min_y = Coor::MAX;
+    let mut max_x = Coor::MIN;
+    let mut max_y = Coor::MIN;
+    for point in coordinates_set {
+        max_x = min(max_x, point.0);
+        max_y = min(max_y, point.1);
+        min_x = min(min_x, point.0);
+        min_y = min(min_y, point.1);
+    }
+    (min_x, min_y, max_x, max_y)
+}
+type Bounds = Shape; // min-x == 1, min-y == 1.
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+struct Offset(Coor, Coor); // Should be >= (1, 1) for most offsets
+impl std::ops::Add for Offset {
+    type Output = Self;
+    fn add(self, other: Self) -> Self {
+        Self(self.0 + other.0, self.1 + other.1)
+    }
+}
 
 type Offsets = BTreeSet<Offset>;
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -52,58 +87,9 @@ type Nonintersectionkey = Vec<Coortable<Vec<Coortable<bool>>>>;
 
 const BOUNDS_CHAR: char = '.';
 
-fn string_to_chartocoors(s: &str) -> (CharToCoors, Coor, Coor) {
-    // TODO: Rename the function, and variables that later call this function
-    // (the current name is horrible)
-
-    let mut min_x = Coor::MAX;
-    let mut min_y = Coor::MAX;
-    let mut max_x = Coor::MIN;
-    let mut max_y = Coor::MIN;
-
-    let mut temp_coords = Vec::new();
-
-    for (y, l) in s.lines().enumerate() {
-        for (x, c) in l.chars().enumerate() {
-            if !c.is_whitespace() {
-                let x = x as Coor;
-                let y = y as Coor;
-                // TODO: Check that x and y fit into the Coor type.
-                // Doing so would mean we'd have to return a Result instead.
-                // Currently, this doesn't even panic, but continues innocently (yet wrongly)
-                // TODO: Then also let x, y be usize here, and only later convert
-                // them to Coor after subtraction
-                min_x = min(min_x, x);
-                min_y = min(min_y, y);
-                max_x = max(max_x, x);
-                max_y = max(max_y, y);
-                temp_coords.push((c, (x, y)));
-                if c != BOUNDS_CHAR {
-                    temp_coords.push((BOUNDS_CHAR, (x, y)));
-                }
-            }
-        }
-    }
-    // TODO: Doesn't handle the case where the puzzle is empty
-    let width = max_x - min_x + 1;
-    let height = max_y - min_y + 1;
-
-    let shift = (min_x, min_y);
-    let mut chartocoors: CharToCoors = CharToCoors::new();
-    for (c, coor) in temp_coords {
-        let shifted_coor = (coor.0 - shift.0, coor.1 - shift.1);
-        chartocoors
-            .entry(c)
-            .or_insert_with(CoordinatesSet::new)
-            .insert(shifted_coor);
-    }
-
-    (chartocoors, width, height)
-}
-
 fn extract_shapekey(
-    start_chartocoors: &CharToCoors,
-    goal_chartocoors: &CharToCoors,
+    start_chartocoors: &CharToPoints,
+    goal_chartocoors: &CharToPoints,
 ) -> (
     Bounds,
     Shapekey,
@@ -111,40 +97,77 @@ fn extract_shapekey(
     GoalShapekeyKey,
     GoalTargetOffsets,
 ) {
-    let mut chartoshape: HashMap<char, Shape> = HashMap::new();
+    fn string_to_chartocoors(s: &str) -> (CharToPoints, Width, Height) {
+        // TODO: Rename the function, and variables that later call this function
+        // (the current name is horrible)
+
+        let mut min_x = Coor::MAX;
+        let mut min_y = Coor::MAX;
+        let mut max_x = Coor::MIN;
+        let mut max_y = Coor::MIN;
+
+        let mut temp_points: Vec<(char, Point)> = Vec::new();
+
+        for (y, l) in s.lines().enumerate() {
+            for (x, c) in l.chars().enumerate() {
+                if !c.is_whitespace() {
+                    let x = x as Coor;
+                    let y = y as Coor;
+                    // TODO: Check that x and y fit into the Coor type.
+                    // Doing so would mean we'd have to return a Result instead.
+                    // Currently, this doesn't even panic, but continues innocently (yet wrongly)
+                    // TODO: Then also let x, y be usize here, and only later convert
+                    // them to Coor after subtraction
+                    // TODO: Should min_x, min_y, max_x, max_y be handles using get_extremes instead?
+                    //       Would make code less performant, but also more legible
+                    min_x = min(min_x, x);
+                    min_y = min(min_y, y);
+                    max_x = max(max_x, x);
+                    max_y = max(max_y, y);
+                    temp_points.push((c, Point(x, y)));
+                    if c != BOUNDS_CHAR {
+                        temp_points.push((BOUNDS_CHAR, Point(x, y)));
+                    }
+                }
+            }
+        }
+        // TODO: Doesn't handle the case where the puzzle is empty
+        let width: Width = max_x - min_x + 1;
+        let height: Height = max_y - min_y + 1;
+
+        let mut char_to_points: CharToPoints = CharToPoints::new();
+        for (c, coor) in temp_points {
+            let shifted_point = Point(coor.0 + 1 - min_x, coor.1 + 1 - min_y); // !!!
+            char_to_points
+                .entry(c)
+                .or_insert_with(Points::new)
+                .insert(shifted_point);
+        }
+
+        (char_to_points, width, height)
+    }
+
+    let mut char_to_shape: HashMap<char, Shape> = HashMap::new();
     let mut shape_to_chars_and_offsets: HashMap<Shape, Vec<(char, Offset)>> = HashMap::new();
-    let mut goal_chars_startoff_targetoff: Vec<(char, Offset, Offset)> = Vec::new(); // (char, start-offset, target-offset)
+    let mut goal_chars_startoffset_targetoffset: Vec<(char, Offset, Offset)> = Vec::new();
 
     // TODO: Handle empty strings gracefully
     // TODO: Also maybe don't use clone, but I'm not into ownership enough to think through how to handle this
     let bounds: Shape = start_chartocoors.get(&BOUNDS_CHAR).unwrap().clone();
-
-    fn get_mins(coordinates_set: &CoordinatesSet) -> (Coor, Coor) {
-        // Extract min-x and min-y.
-        // Assumes that coordinatesSet is nonempty.
-        // TODO: Is that a misassumption?
-        let mut min_x = Coor::MAX;
-        let mut min_y = Coor::MAX;
-        for coor in coordinates_set {
-            min_x = min(min_x, coor.0);
-            min_y = min(min_y, coor.1);
-        }
-        (min_x, min_y)
-    }
 
     for (c, start_coords) in start_chartocoors.iter() {
         if c == &BOUNDS_CHAR {
             continue;
         }
 
-        let (min_x, min_y) = get_mins(start_coords);
+        let (min_x, min_y) = get_extremes(start_coords);
         let shape: Shape = start_coords
             .iter()
             .map(|coor| (coor.0 - min_x, coor.1 - min_y))
             .collect();
 
         // This is only used to map goal-shapes to their indices in shapekey later
-        chartoshape.insert(*c, shape.clone());
+        char_to_shape.insert(*c, shape.clone());
 
         shape_to_chars_and_offsets
             .entry(shape)
@@ -157,8 +180,12 @@ fn extract_shapekey(
             // that are not in the startstring, then that puzzle is not correctly posed,
             // which we should communicate instead.
 
-            let (target_min_x, target_min_y) = get_mins(goal_coords);
-            goal_chars_startoff_targetoff.push((*c, (min_x, min_y), (target_min_x, target_min_y)));
+            let (target_min_x, target_min_y) = get_extremes(goal_coords);
+            goal_chars_startoffset_targetoffset.push((
+                *c,
+                (min_x, min_y),
+                (target_min_x, target_min_y),
+            ));
         }
     }
 
@@ -202,12 +229,12 @@ fn extract_shapekey(
         .collect();
     // For all goal-blocks, now look up which index their shape in shapekey corresponds to
     // TODO: Should we sort this first?
-    let goal_shapekey_key: GoalShapekeyKey = goal_chars_startoff_targetoff
+    let goal_shapekey_key: GoalShapekeyKey = goal_chars_startoffset_targetoffset
         .iter()
         .map(|(c, _, _)| {
             raw_shapekey
                 .iter()
-                .position(|(shape, _)| shape == chartoshape.get(c).unwrap())
+                .position(|(shape, _)| shape == char_to_shape.get(c).unwrap())
                 .unwrap()
         })
         .collect();
@@ -224,12 +251,12 @@ fn extract_shapekey(
             })
             .filter(|offsets: &Offsets| !offsets.is_empty())
             .collect(),
-        goal_offsets: goal_chars_startoff_targetoff
+        goal_offsets: goal_chars_startoffset_targetoffset
             .iter()
             .map(|(_, start, _)| start.clone())
             .collect(),
     };
-    let goal_target_offsets = goal_chars_startoff_targetoff
+    let goal_target_offsets = goal_chars_startoffset_targetoffset
         .iter()
         .map(|(_, _, target)| target.clone())
         .collect();
@@ -260,8 +287,7 @@ fn build_nonintersectionkey(
                 let mut nik_axy: Vec<Coortable<bool>> = Vec::new();
 
                 // TODO: Extract into shift-function
-                let shifted_a: CoordinatesSet =
-                    shape_a.iter().map(|(x, y)| (x + xa, y + ya)).collect();
+                let shifted_a: Points = shape_a.iter().map(|(x, y)| (x + xa, y + ya)).collect();
                 if shifted_a.is_subset(bounds) {
                     // Let the fun begin
                     for shape_b in shapekey {
@@ -270,7 +296,7 @@ fn build_nonintersectionkey(
                             let mut nik_axy_bx: Vec<bool> = Vec::new();
                             for yb in 0..height {
                                 // TODO: Extract into shift-function
-                                let shifted_b: CoordinatesSet =
+                                let shifted_b: Points =
                                     shape_b.iter().map(|(x, y)| (x + xb, y + yb)).collect();
 
                                 let nik_axy_bxy: bool = shifted_b.is_subset(bounds)
@@ -495,10 +521,10 @@ fn print_puzzle(
     // blocks move, giving the illusion of some blocks having changed shapes
 
     // Create vec of blocks:
-    let mut blocks: Vec<CoordinatesSet> = Vec::new();
+    let mut blocks: Vec<Points> = Vec::new();
     for (shape, offsets) in shapekey.iter().zip(blockstate.nongoal_offsets.iter()) {
         for offset in offsets {
-            let block: CoordinatesSet = shape
+            let block: Points = shape
                 .iter()
                 .map(|coor| (coor.0 + offset.0, coor.1 + offset.1))
                 .collect();
@@ -506,7 +532,7 @@ fn print_puzzle(
         }
     }
     for (shapekey_ix, offset) in goal_shapekey_key.iter().zip(blockstate.goal_offsets.iter()) {
-        let block: CoordinatesSet = shapekey[*shapekey_ix]
+        let block: Points = shapekey[*shapekey_ix]
             .iter()
             .map(|coor| (coor.0 + offset.0, coor.1 + offset.1))
             .collect();
@@ -606,10 +632,8 @@ fn solve_puzzle_preprocessing(
     assert_eq!(
         start_chartocoors
             .get(&BOUNDS_CHAR)
-            .unwrap_or(&CoordinatesSet::new()),
-        goal_chartocoors
-            .get(&BOUNDS_CHAR)
-            .unwrap_or(&CoordinatesSet::new()),
+            .unwrap_or(&Points::new()),
+        goal_chartocoors.get(&BOUNDS_CHAR).unwrap_or(&Points::new()),
         "The start and goal must have the same bounds."
     );
 
