@@ -488,92 +488,144 @@ fn tighter_heuristic(
     goal_target_offsets: &GoalTargetOffsets,
     width: Coor,
     height: Coor,
-) -> Floaty {
-    let nongoal_offset_vec: Vec<Offset> = blockstate
+) -> usize {
+    let nongoal_offset_vec: Vec<(usize, Offset)> = blockstate
         .nongoal_offsets
         .iter()
+        .enumerate()
+        .map(|(shape_ix, offsets)| offsets.iter().map(|offset| (shape_ix, offset.clone())))
         .flatten()
-        .cloned()
         .collect();
-    let goal_offset_vec = blockstate.goal_offsets;
+    let nongoal_offset_vec_len = nongoal_offset_vec.len();
+    let goal_offset_vec: Vec<(usize, Offset)> = blockstate.goal_offsets.iter().enumerate().map(|(goalvec_ix, offset)| (goal_shapekey_key[goalvec_ix], offset.clone())).collect();
+    let total_len = nongoal_offset_vec_len + goal_offset_vec.len();
+    
+    // TODO: Better datastructure than BTreeSeet?
+    type PulverizedBlocks = Vec<bool>;
 
-    #[derive(PartialEq, Eq)]
     struct Hypervertex {
-        pulverized_blocks: BTreeSet<usize>, // i ∈ pulverized_blocks <=> block (nongoal_offset_vec:goal_offset_vec)[i] is translucent
+        pulverized_blocks: PulverizedBlocks, // pulverized_blocks[i]==true <=> block (nongoal_offset_vec:goal_offset_vec)[i] is translucent
         offsets: Offsets, // Offsets that are possible to reach while pulverized_blocks are translucent
-        fringe: Vec<Offset>, // Subset of offsets. Contains an offset iff it has in-bounds neighbour-offset that can't be accessed without pulverizing more blocks
+        fringe: BTreeSet<Offset>, // Subset of offsets. Contains an offset iff it is in-bounds, but can't be accessed without pulverizing more blocks.
     }
+    impl PartialEq for Hypervertex {
+        fn eq(&self, other: &Hypervertex) -> bool {
+            // Yes, I'm certain about this.
+            self.pulverized_blocks == other.pulverized_blocks
+        }
+    }
+    impl Eq for Hypervertex {}
 
     let pulverized_bfs = |goalvec_ix: usize| -> usize {
-        let sub_bfs = |&Hypervertex{ pulverized_blocks, offsets, fringe}, newly_pulverized: usize| -> Vec<Hypervertex> {
-            let mut new_pulverized_blocks = pulverized_blocks.clone();
-            new_pulverized_blocks.insert(newly_pulverized);
-            let mut seen_offsets: Offsets = offsets.clone();
-            let mut stack: Vec<Offset> = fringe.clone();
-            let mut new_fringe: Vec<Offset> = Vec::new();
-        }
-        let target_goal_offset = goal_target_offsets[goalvec_ix];
-        let mut seen_offsets: BTreeSet<Offset> = BTreeSet::new();
-        let mut stack: Vec<OffsetAndPulverizedBlocks> = vec![OffsetAndPulverizedBlocks {
-            offset: goal_offset_vec[goalvec_ix],
-            pulverized_blocks: BTreeSet::new(),
-        }];
-        while let Some(OffsetAndPulverizedBlocks {
-            offset,
-            pulverized_blocks,
-        }) = stack.pop()
-        {
-            let pulverized_count = pulverized_blocks.len();
-            if offset == target_goal_offset {
-                return pulverized_count;
-            }
-
-            // TODO: This is AWFUL code.
-            // And no, we can't just extract the array into match-arms and for-loop
-            // over the match-result, because arrays of different length are
-            // different types
-            // Should we extend the intersection-vector to reach one more cell? Hmm
-            let inserty = |new_offset: Offset| {
-                if new_offset.0 < width && new_offset.1 < height {
-                    panic!("TODO: Iterate over new blocks you may hit now");
-
-                    //&& seen_offsets.insert(new_offset)
-                    //&& is_legal(new_offset)
-                    legal_offsets.push(new_offset);
-                    stack.push(new_offset);
+        let shapekey_goal_ix = goal_shapekey_key[goalvec_ix];
+        let goal_target_offset = goal_target_offsets[goalvec_ix];
+        let nik_goal = nonintersectionkey[shapekey_goal_ix];
+        let is_hyper_legal = |offsety: &Offset, pulverized_blocks: &PulverizedBlocks| -> bool {
+            for (ix, (shape_ix, shape_offset)) in nongoal_offset_vec.iter().enumerate() {
+                if pulverized_blocks[ix] {
+                    continue;
                 }
-            };
-            // TODO: I hate this
-            if offset.0 > 0 {
-                if offset.1 > 0 {
-                    [
-                        (offset.0, offset.1 + 1),
-                        (offset.0 + 1, offset.1),
-                        (offset.0, offset.1 - 1),
-                        (offset.0 - 1, offset.1),
-                    ]
-                    .map(inserty);
-                } else {
-                    [
-                        (offset.0, offset.1 + 1),
-                        (offset.0 + 1, offset.1),
-                        (offset.0 - 1, offset.1),
-                    ]
-                    .map(inserty);
+                if !nonintersectionkey[*shape_ix][shape_offset.0 as usize][shape_offset.1 as usize]
+                    [shapekey_goal_ix][offsety.0 as usize][offsety.1 as usize]
+                {
+                    return false;
                 }
-            } else if offset.1 > 0 {
-                [
-                    (offset.0, offset.1 + 1),
-                    (offset.0 + 1, offset.1),
-                    (offset.0, offset.1 - 1),
-                ]
-                .map(inserty);
-            } else {
-                [(offset.0, offset.1 + 1), (offset.0 + 1, offset.1)].map(inserty);
             }
+            for (ix, (shape_ix, shape_offset)) in goal_offset_vec.iter().enumerate() {
+                if pulverized_blocks[nongoal_offset_vec_len+ix] {
+                    continue;
+                }
+                if !nonintersectionkey[*shape_ix][shape_offset.0 as usize][shape_offset.1 as usize]
+                    [shapekey_goal_ix][offsety.0 as usize][offsety.1 as usize]
+                {
+                    return false;
+                }
+            }
+            true
+        };
+        let start_hyper_pulverized_blocks = vec![false; total_len];
+        let (start_hyper_offsets, start_hyper_fringe) = {
+            let mut start_hyper_offsets: Offsets = Offsets::new();
+            let mut start_hyper_fringe: BTreeSet<Offset> = BTreeSet::new();
+
+            // TODO: Different data structures?
+            let mut seen_offsets: BTreeSet<Offset> = BTreeSet::new();
+            
+            let very_initial_offset = goal_offset_vec[goalvec_ix].1;
+            seen_offsets.insert(very_initial_offset.clone());
+            let mut stack: Vec<Offset> = vec![very_initial_offset.clone()];
+            while let Some(new_offset) = stack.pop() {
+                // TODO: Maybe this can be made faster by not going back in
+                // the direction we just came from
+                for new_offset in [new_offset.up(), new_offset.down(), new_offset.left(), new_offset.right()] {
+                    // TODO: This is still an awful hack to check in-boundsness
+                    let x = new_offset.0;
+                    let y = new_offset.1;
+                    let in_bounds = nik_goal[x as usize - 1][y as usize - 1].is_empty();
+                    if !in_bounds {
+                        continue;
+                    }
+                    let hyper_legal = is_hyper_legal(&new_offset, &start_hyper_pulverized_blocks);
+                    
+                    if hyper_legal {
+                        if seen_offsets.insert(new_offset.clone()) {
+                            start_hyper_offsets.insert(new_offset.clone());
+                            stack.push(new_offset);
+                        }
+                    } else {
+                        start_hyper_fringe.insert(new_offset.clone());
+                    }
+                }
+            }
+    
+            (start_hyper_offsets, start_hyper_fringe)
         }
-        legal_offsets
+
+        // TODO: This can be sped up if you implement bfs yourself. Checking offsets.contains(goal_target_offset) could be done earlier,
+        // and we wouldn't need to sub-bfs all the time, but would first check if some other Hypervertex with the same
+        // pulverized-blocks already exists.
+        pathfinding::directed::bfs::bfs(
+            Hypervertex{
+                pulverized_blocks: start_hyper_pulverized_blocks,
+                offsets: start_hyper_offsets,
+                fringe: start_hyper_fringe,
+            },
+            // TODO: Can this successor-function be used to make start-vertex-finding easier, please?
+            |Hypervertex{pulverized_blocks, offsets, fringe}| {
+                new_pulverized_blocks = {
+                    let mut new_pulverized_blocks = PulverizedBlocks::new();
+                    for (ix, (shape_ix, shape_offset)) in nongoal_offset_vec.iter().enumerate() {
+                        if pulverized_blocks[ix] {
+                            continue;
+                        }
+                        if !nonintersectionkey[*shape_ix][shape_offset.0 as usize][shape_offset.1 as usize]
+                            [shapekey_goal_ix][offsety.0 as usize][offsety.1 as usize]
+                        {
+                            new_pulverized_blocks.insert(ix);
+                        }
+                    }
+                    for (ix, (shape_ix, shape_offset)) in goal_offset_vec.iter().enumerate() {
+                        let shifted_ix = nongoal_offset_vec_len+ix
+                        if pulverized_blocks[shifted_ix] {
+                            continue;
+                        }
+                        if !nonintersectionkey[*shape_ix][shape_offset.0 as usize][shape_offset.1 as usize]
+                            [shapekey_goal_ix][offsety.0 as usize][offsety.1 as usize]
+                        {
+                            new_pulverized_blocks.insert(shifted_ix);
+                        }
+                    }
+
+                    new_pulverized_blocks
+                }
+            },
+            |Hypervertex{pulverized_blocks, offsets, fringe}| offsets.contains(goal_target_offset);
+        ).unwrap().len() - 1
     };
+
+    // TODO: This unwrap is dangerous?
+    goal_offset_vec.iter().enumerate().map(|(goalvec_ix, _)| pulverized_bfs(goalvec_ix)).max().unwrap()
+
 }
 
 fn get_neighboring_blockstates(
@@ -633,8 +685,8 @@ fn get_neighboring_blockstates(
             // TODO: Maybe this can be made faster by not going back in
             // the direction we just came from
             for new_offset in [offset.up(), offset.down(), offset.left(), offset.right()] {
-                // TODO: Which of these checks is faster?
                 // TODO: Can we check seen_offsets membership without cloning?
+                // TODO: Which of these checks is faster? And shouldn't we be using pathfinding::directed::bfs::bfs instead?
                 if is_legal(&new_offset) && seen_offsets.insert(new_offset.clone()) {
                     legal_offsets.push(new_offset.clone());
                     stack.push(new_offset);
