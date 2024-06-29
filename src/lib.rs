@@ -202,7 +202,7 @@ fn extract_shapekey(
                     // And if sizes equal, just compare the shapes as sets
                     a_shape.cmp(b_shape)
                 } else {
-                    a_size.cmp(&b_size)
+                    b_size.cmp(&a_size)
                 }
             }
         },
@@ -429,9 +429,7 @@ fn heuristic(
                     .iter()
                     .filter(|offset| {
                         // TODO: This is a TERRIBLE hack to check whether offset is in-bounds
-                        let x = offset.0;
-                        let y = offset.1;
-                        nik_goal[x as usize - 1][y as usize - 1].is_empty()
+                        !nik_goal[offset.0 as usize][offset.1 as usize].is_empty()
                     })
                     .map(|offset| -> (Offset, Floaty) {
                         (
@@ -445,11 +443,11 @@ fn heuristic(
                                             FloatOrd(
                                                 offsets
                                                     .iter()
-                                                    .filter(|Offset(x, y)| {
-                                                        !nik_goal[offset.0 as usize - 1]
-                                                            [offset.1 as usize - 1][shape_ix]
-                                                            [*x as usize]
-                                                            [*y as usize]
+                                                    .filter(|Offset(nx, ny)| {
+                                                        !nik_goal[offset.0 as usize]
+                                                            [offset.1 as usize][shape_ix]
+                                                            [*nx as usize]
+                                                            [*ny as usize]
                                                     })
                                                     .count()
                                                     as f32,
@@ -460,10 +458,11 @@ fn heuristic(
                                 let goal_sum: Floaty = goal_offsets
                                     .iter()
                                     .enumerate()
-                                    .filter(|(this_goal_ix, Offset(x, y))| {
-                                        !nik_goal[offset.0 as usize - 1][offset.1 as usize - 1]
+                                    .filter(|(this_goal_ix, Offset(nx, ny))| {
+                                        !nik_goal[offset.0 as usize][offset.1 as usize]
                                             [goal_shapekey_key[*this_goal_ix]]
-                                            [*x as usize][*y as usize]
+                                            [*nx as usize]
+                                            [*ny as usize]
                                             && *this_goal_ix != goalvec_ix
                                     })
                                     .map(|(this_goal_ix, _)| -> Floaty {
@@ -491,8 +490,6 @@ fn tighter_heuristic(
     nonintersectionkey: &Nonintersectionkey,
     goal_shapekey_key: &GoalShapekeyKey,
     goal_target_offsets: &GoalTargetOffsets,
-    width: Coor,
-    height: Coor,
 ) -> usize {
     let nongoal_offset_vec: Vec<(usize, Offset)> = blockstate
         .nongoal_offsets
@@ -563,7 +560,7 @@ fn tighter_heuristic(
                 }
             }
             for (ix, (shape_ix, shape_offset)) in goal_offset_vec.iter().enumerate() {
-                if pulverized_blocks[nongoal_offset_vec_len + ix] {
+                if pulverized_blocks[nongoal_offset_vec_len + ix] || goalvec_ix == ix {
                     continue;
                 }
                 if !nonintersectionkey[*shape_ix][shape_offset.0 as usize][shape_offset.1 as usize]
@@ -595,9 +592,8 @@ fn tighter_heuristic(
                     new_offset.right(),
                 ] {
                     // TODO: This is still an awful hack to check in-boundsness
-                    let x = new_offset.0;
-                    let y = new_offset.1;
-                    let in_bounds = nik_goal[x as usize - 1][y as usize - 1].is_empty();
+                    let in_bounds =
+                        !nik_goal[new_offset.0 as usize][new_offset.1 as usize].is_empty();
                     if !in_bounds {
                         continue;
                     }
@@ -656,7 +652,7 @@ fn tighter_heuristic(
                     }
                     for (ix, (shape_ix, shape_offset)) in goal_offset_vec.iter().enumerate() {
                         let shifted_ix = nongoal_offset_vec_len + ix;
-                        if pulverized_blocks[shifted_ix] {
+                        if pulverized_blocks[shifted_ix] || goalvec_ix == ix {
                             continue;
                         }
                         if !nonintersectionkey[*shape_ix][shape_offset.0 as usize]
@@ -691,9 +687,8 @@ fn tighter_heuristic(
                             new_offset.right(),
                         ] {
                             // TODO: This is still an awful hack to check in-boundsness
-                            let x = new_offset.0;
-                            let y = new_offset.1;
-                            let in_bounds = nik_goal[x as usize - 1][y as usize - 1].is_empty();
+                            let in_bounds =
+                                !nik_goal[new_offset.0 as usize][new_offset.1 as usize].is_empty();
                             if !in_bounds {
                                 continue;
                             }
@@ -709,10 +704,16 @@ fn tighter_heuristic(
                             }
                         }
                     }
+
+                    hyper_stack.push(Hypervertex {
+                        pulverized_blocks: new_pulverized_blocks,
+                        offsets: new_offsets,
+                        fringe: new_fringe,
+                    })
                 }
             }
         }
-        return usize::MAX; // TODO: Kinda ad if goal completely unreachable
+        return usize::MAX; // TODO: Kinda bad if goal completely unreachable
     };
 
     // TODO: This unwrap is dangerous?
@@ -1133,8 +1134,8 @@ pub fn solve_puzzle_bfs(start: &str, goal: &str) {
 
 pub fn solve_puzzle_astar(start: &str, goal: &str) {
     let (
-        _bounds,
-        _shapekey,
+        bounds,
+        shapekey,
         start_blockstate,
         nonintersectionkey,
         goal_shapekey_key,
@@ -1144,6 +1145,37 @@ pub fn solve_puzzle_astar(start: &str, goal: &str) {
         height,
     ) = puzzle_preprocessing(start, goal);
 
+    print_puzzle(
+        &bounds,
+        &shapekey,
+        &start_blockstate,
+        &goal_shapekey_key,
+        width,
+        height,
+    );
+    println!(
+        "Heuristic: {}",
+        heuristic(
+            &start_blockstate,
+            &nonintersectionkey,
+            &goal_shapekey_key,
+            &goal_target_offsets,
+            &minkowski_diams,
+            width,
+            height
+        )
+    );
+    println!(
+        "Tighter heuristic: {}",
+        tighter_heuristic(
+            &start_blockstate,
+            &nonintersectionkey,
+            &goal_shapekey_key,
+            &goal_target_offsets,
+        )
+    );
+
+    /*
     let (path, _) = pathfinding::directed::astar::astar(
         &start_blockstate,
         |blockstate| -> Vec<(Blockstate, Floaty)> {
@@ -1168,4 +1200,5 @@ pub fn solve_puzzle_astar(start: &str, goal: &str) {
     .unwrap();
 
     assert!(path.len() < 1000); // TODO: Remove this
+    */
 }
