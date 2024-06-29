@@ -393,6 +393,7 @@ fn build_nonintersectionkey(
     nik
 }
 
+// Slow and bad heuristic
 fn heuristic(
     blockstate: &Blockstate,
     nonintersectionkey: &Nonintersectionkey,
@@ -485,6 +486,7 @@ fn heuristic(
         .unwrap() // TODO: Bad if we have no goal blocks
 }
 
+// Slower and a little better heuristic
 fn tighter_heuristic(
     blockstate: &Blockstate,
     nonintersectionkey: &Nonintersectionkey,
@@ -657,7 +659,6 @@ fn tighter_heuristic(
             fringe,
         }) = hyper_queue.pop_front()
         {
-            println!("{:?} {:?} {:?}", pulverized_blocks, offsets, fringe);
             if offsets.contains(&goal_target_offset) {
                 return pulverized_blocks.iter().filter(|x| **x).count() - 1;
             }
@@ -1140,6 +1141,7 @@ pub fn solve_puzzle_astar(start: &str, goal: &str) {
         height,
     ) = puzzle_preprocessing(start, goal);
 
+    /*
     print_puzzle(
         &bounds,
         &shapekey,
@@ -1169,29 +1171,28 @@ pub fn solve_puzzle_astar(start: &str, goal: &str) {
             &goal_target_offsets,
         )
     );
+    */
 
     let (path, _) = pathfinding::directed::astar::astar(
         &start_blockstate,
-        |blockstate| -> Vec<(Blockstate, Floaty)> {
+        |blockstate| -> Vec<(Blockstate, usize)> {
             get_neighboring_blockstates(blockstate, &nonintersectionkey, &goal_shapekey_key)
                 .iter()
-                .map(|blockstate| (blockstate.clone(), FloatOrd(1.0))) // TODO: This is horrible?
+                .map(|blockstate| (blockstate.clone(), 1)) // TODO: This is horrible?
                 .collect()
         },
         |blockstate| {
-            heuristic(
+            tighter_heuristic(
                 blockstate,
                 &nonintersectionkey,
                 &goal_shapekey_key,
                 &goal_target_offsets,
-                &minkowski_diams,
-                width,
-                height,
             )
         },
         |blockstate| blockstate.goal_offsets == goal_target_offsets,
     )
     .unwrap();
 
+    println!("{:?}", path.len());
     assert!(path.len() < 1000); // TODO: Remove this
 }
