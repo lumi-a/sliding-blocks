@@ -1,20 +1,14 @@
 #![allow(unused)]
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
-use sliding_blocks::{examples, solve_puzzle_astar, solve_puzzle_bfs};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, SamplingMode};
+use sliding_blocks::{examples, solve_puzzle};
 
 pub fn criterion_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("Examples");
     group.sample_size(10);
-    for (name, puzzle) in [
-        ("ROYAL_ESCAPE", examples::ROYAL_ESCAPE),
-        ("DIABOLICAL_BOX", examples::DIABOLICAL_BOX),
-        ("GARBAGE_DISPOSAL", examples::GARBAGE_DISPOSAL),
-    ] {
-        group.bench_with_input(BenchmarkId::new("lib_bfs", name), &puzzle, |b, p| {
-            b.iter(|| solve_puzzle_bfs(p.start, p.goal))
-        });
-        group.bench_with_input(BenchmarkId::new("astar", name), &puzzle, |b, p| {
-            b.iter(|| solve_puzzle_astar(p.start, p.goal))
+    group.sampling_mode(SamplingMode::Flat);
+    for puzzle in examples::ALL_EXAMPLES {
+        group.bench_with_input(BenchmarkId::new("lib_bfs", puzzle.name), &puzzle, |b, p| {
+            b.iter(|| solve_puzzle(p.start, p.goal))
         });
     }
     group.finish();

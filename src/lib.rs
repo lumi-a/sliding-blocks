@@ -1,13 +1,9 @@
 pub mod examples;
 
 use colored::{self, Colorize};
-use itertools::{iproduct, Itertools};
-use ordered_float::OrderedFloat as FloatOrd;
 use std::cmp::{max, min, Ordering};
-use std::collections::hash_map::Entry::Occupied;
-use std::collections::hash_map::Entry::Vacant;
-use std::collections::{BTreeSet, BinaryHeap, VecDeque};
-use std::collections::{HashMap, HashSet};
+use std::collections::BTreeSet;
+use std::collections::HashMap;
 
 // TODO: Perhaps it's better to abstract most of these into structs
 type Coor = u8;
@@ -93,10 +89,6 @@ type GoalShapekeyKey = Vec<usize>; // Given an index in the Blockstate.goal_bloc
 type GoalTargetOffsets = Vec<Offset>; // At what offset is a block in a goal-position?
 type Offsettable<T> = Vec<Vec<T>>;
 
-type Floaty = FloatOrd<f32>; // I *need* a total order on floats, *please*
-
-type MinkowskiDiams = Vec<Vec<Floaty>>; // Given an index in the Blockstate.goal_blocks vec, and an index of its shape in the shapekey vec, what is the diameter of the minkowski sum of the two shapes? Used for heuristic.
-
 fn _intersect_coortables(a: &Offsettable<bool>, b: &Offsettable<bool>) -> Offsettable<bool> {
     a.iter()
         .zip(b)
@@ -154,7 +146,7 @@ fn extract_shapekey(
 
         shape_to_chars_and_offsets
             .entry(shape)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push((*c, (&shape_min).into()));
         if let Some(goal_points) = goal_chartopoints.get(c) {
             // TODO: Because we're currently in the start-loop, and won't separately
@@ -230,7 +222,7 @@ fn extract_shapekey(
             .map(|(_, chars_and_offsets)| {
                 chars_and_offsets
                     .iter()
-                    .filter(|(c, _)| !goal_chartopoints.get(c).is_some())
+                    .filter(|(c, _)| goal_chartopoints.get(c).is_none())
                     .map(|(_, offset)| offset.clone())
                     .collect()
             })
@@ -253,94 +245,6 @@ fn extract_shapekey(
         goal_shapekey_key,
         goal_target_offsets,
     )
-}
-
-fn get_minkowski_diams(goal_shapekey_key: &GoalShapekeyKey, shapekey: &Shapekey) -> MinkowskiDiams {
-    let mut minkowski_diams = MinkowskiDiams::new();
-    for goalvec_ix in goal_shapekey_key.iter() {
-        let goal_shape: BTreeSet<(isize, isize)> = shapekey[*goalvec_ix]
-            .iter()
-            .map(|Point(x, y)| (*x as isize, *y as isize))
-            .collect();
-        let goal_max_x = *goal_shape.iter().map(|(x, _)| x).max().unwrap(); // TODO: Two iterations, kinda inefficient
-        let goal_max_y = *goal_shape.iter().map(|(_, y)| y).max().unwrap(); // We could finally extract this into a function?
-        let mut goal_diams: Vec<Floaty> = Vec::new();
-        for shape in shapekey {
-            let shape: BTreeSet<(isize, isize)> = shape
-                .iter()
-                .map(|Point(x, y)| (*x as isize, *y as isize))
-                .collect();
-            let shape_max_x = *shape.iter().map(|(x, _)| x).max().unwrap(); // TODO: Two iterations, kinda inefficient
-            let shape_max_y = *shape.iter().map(|(_, y)| y).max().unwrap(); // We could finally extract this into a function?
-
-            // TODO: NONE of this actually is a minkowski-sum. Rename all variables
-            let mut minkowski_sum: BTreeSet<(isize, isize)> = BTreeSet::new();
-            // The loop-variables dx, dy denote the offset of goal_shape.
-            // We'll add (goal_shape + offset) to minkowski_sum iff
-            // (goal_shape + offset) intersects shape. For that, looping over [(-goal_max_x)..=shape_max_x]
-            // suffices (as oppposed to (-width..=width) or something), which I hope you can
-            // visualise in your head.
-            // TODO: Could we actually loop over an even smaller set?
-            for dx in (-goal_max_x)..=shape_max_x {
-                for dy in (-goal_max_y)..=shape_max_y {
-                    let moved_goal_shape: BTreeSet<(isize, isize)> =
-                        goal_shape.iter().map(|(x, y)| (x + dx, y + dy)).collect();
-                    if moved_goal_shape.intersection(&shape).count() > 0 {
-                        // TODO: How inefficient in this?
-                        minkowski_sum = minkowski_sum.union(&moved_goal_shape).cloned().collect();
-                    }
-                }
-            }
-
-            // Note that the maximum taxicab-distance is NOT admissible: Consider a U-shape, and a single-cell-shape.
-            // The actual diameter should be 5 (if the U-shape has volume 5), but the taxicab-maximum is 3.
-            // Instead, we'll calculate diameter of each of the connected components of the graph of the sum of the two shapes
-            // (where two cells are adjacent iff they're adjacent on the grid) and add 1.
-            let nodes: Vec<(isize, isize)> = minkowski_sum.iter().cloned().collect();
-            let connected_components =
-                pathfinding::undirected::connected_components::connected_components(
-                    &nodes,
-                    |(x, y)| -> Vec<(isize, isize)> {
-                        [(*x - 1, *y), (*x + 1, *y), (*x, *y - 1), (*x, *y + 1)]
-                            .iter()
-                            .filter(|a| minkowski_sum.contains(a))
-                            .cloned()
-                            .collect_vec()
-                    },
-                );
-
-            let diam: usize = connected_components
-                .iter()
-                .map(|component| {
-                    // find diameter of component
-                    iproduct!(component, component)
-                        .filter(|(v, w)| v > w) // Halves processing
-                        .map(|(v, w)| {
-                            pathfinding::directed::bfs::bfs(
-                                v,
-                                |(x, y)| -> Vec<(isize, isize)> {
-                                    [(*x - 1, *y), (*x + 1, *y), (*x, *y - 1), (*x, *y + 1)]
-                                        .iter()
-                                        .filter(|a| component.contains(a))
-                                        .cloned()
-                                        .collect_vec()
-                                },
-                                |u| u == w,
-                            )
-                            .unwrap()
-                            .len()
-                                - 2 // Subtraction will never overflow, because v!=w
-                        })
-                        .max()
-                        .unwrap_or(1)
-                })
-                .sum();
-
-            goal_diams.push(FloatOrd(1.0 / diam as f32));
-        }
-        minkowski_diams.push(goal_diams)
-    }
-    minkowski_diams
 }
 
 fn build_nonintersectionkey(
@@ -391,334 +295,6 @@ fn build_nonintersectionkey(
         nik.push(nik_a);
     }
     nik
-}
-
-// Slow and bad heuristic
-fn heuristic(
-    blockstate: &Blockstate,
-    nonintersectionkey: &Nonintersectionkey,
-    goal_shapekey_key: &GoalShapekeyKey,
-    goal_target_offsets: &GoalTargetOffsets,
-    minkowski_diams: &MinkowskiDiams,
-    width: Coor,
-    height: Coor,
-) -> Floaty {
-    // TODO: Prove this is admissible
-    let nongoal_offsets = &blockstate.nongoal_offsets;
-    let goal_offsets = &blockstate.goal_offsets;
-    goal_offsets
-        .iter()
-        .enumerate()
-        .map(|(goalvec_ix, current_goal_offset)| {
-            let goal_shapeix = goal_shapekey_key[goalvec_ix];
-            let nik_goal = &nonintersectionkey[goal_shapeix];
-            let minkowskis_goal = &minkowski_diams[goalvec_ix];
-            let goal_target_offset = &goal_target_offsets[goalvec_ix];
-
-            // TODO: This dijkstra-search can be improved: Since only the vertices carry costs, we actually
-            // calculate them too often (since we calculate them again for each _edge_).
-            // I'm afraid you'll have to use another implementation of dijkstra for that, sorry.
-            let (_, cost): (_, Floaty) = pathfinding::directed::dijkstra::dijkstra(
-                current_goal_offset,
-                |goal_offset| {
-                    [
-                        goal_offset.up(),
-                        goal_offset.down(),
-                        goal_offset.left(),
-                        goal_offset.right(),
-                    ]
-                    .iter()
-                    .filter(|offset| {
-                        // TODO: This is a TERRIBLE hack to check whether offset is in-bounds
-                        !nik_goal[offset.0 as usize][offset.1 as usize].is_empty()
-                    })
-                    .map(|offset| -> (Offset, Floaty) {
-                        (
-                            offset.clone(), // new offset
-                            {
-                                let nongoal_sum: Floaty =
-                                    nongoal_offsets // cost
-                                        .iter()
-                                        .enumerate()
-                                        .map(|(shape_ix, offsets)| -> Floaty {
-                                            FloatOrd(
-                                                offsets
-                                                    .iter()
-                                                    .filter(|Offset(nx, ny)| {
-                                                        !nik_goal[offset.0 as usize]
-                                                            [offset.1 as usize][shape_ix]
-                                                            [*nx as usize]
-                                                            [*ny as usize]
-                                                    })
-                                                    .count()
-                                                    as f32,
-                                            ) * minkowskis_goal[shape_ix]
-                                        })
-                                        .sum();
-
-                                let goal_sum: Floaty = goal_offsets
-                                    .iter()
-                                    .enumerate()
-                                    .filter(|(this_goal_ix, Offset(nx, ny))| {
-                                        !nik_goal[offset.0 as usize][offset.1 as usize]
-                                            [goal_shapekey_key[*this_goal_ix]]
-                                            [*nx as usize]
-                                            [*ny as usize]
-                                            && *this_goal_ix != goalvec_ix
-                                    })
-                                    .map(|(this_goal_ix, _)| -> Floaty {
-                                        minkowskis_goal[goal_shapekey_key[this_goal_ix]]
-                                    })
-                                    .sum();
-
-                                nongoal_sum + goal_sum
-                            },
-                        )
-                    }) // TODO: implement actual sum
-                    .collect_vec()
-                },
-                |goal_offset| *goal_offset == *goal_target_offset,
-            )
-            .unwrap(); // TODO: This unwrap might very well fail in practice
-            cost
-        })
-        .max()
-        .unwrap() // TODO: Bad if we have no goal blocks
-}
-
-// Slower and a little better heuristic
-fn tighter_heuristic(
-    blockstate: &Blockstate,
-    nonintersectionkey: &Nonintersectionkey,
-    goal_shapekey_key: &GoalShapekeyKey,
-    goal_target_offsets: &GoalTargetOffsets,
-) -> usize {
-    let nongoal_offset_vec: Vec<(usize, Offset)> = blockstate
-        .nongoal_offsets
-        .iter()
-        .enumerate()
-        .map(|(shape_ix, offsets)| -> Vec<(usize, Offset)> {
-            offsets
-                .iter()
-                .map(|offset| (shape_ix, offset.clone()))
-                .collect()
-        })
-        .flatten()
-        .collect();
-    let nongoal_offset_vec_len = nongoal_offset_vec.len();
-    let goal_offset_vec: Vec<(usize, Offset)> = blockstate
-        .goal_offsets
-        .iter()
-        .enumerate()
-        .map(|(goalvec_ix, offset)| (goal_shapekey_key[goalvec_ix], offset.clone()))
-        .collect();
-    let total_len = nongoal_offset_vec_len + goal_offset_vec.len();
-
-    // TODO: Better datastructures than BTreeSeet?
-    type PulverizedBlocks = Vec<bool>;
-    type Fringe = BTreeSet<Offset>;
-
-    #[derive(Clone)]
-    struct Hypervertex {
-        pulverized_blocks: PulverizedBlocks, // pulverized_blocks[i]==true <=> block (nongoal_offset_vec:goal_offset_vec)[i] is translucent
-        offsets: Offsets, // Offsets that are possible to reach while pulverized_blocks are translucent
-        fringe: Fringe, // Subset of offsets. Contains an offset iff it is in-bounds, but can't be accessed without pulverizing more blocks. As such, it's always disjoint from `offsets``.
-    }
-    impl PartialEq for Hypervertex {
-        fn eq(&self, other: &Hypervertex) -> bool {
-            // Yes, I'm certain about this.
-            self.pulverized_blocks == other.pulverized_blocks
-        }
-    }
-    impl Eq for Hypervertex {}
-    impl std::hash::Hash for Hypervertex {
-        fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-            self.pulverized_blocks.hash(state);
-        }
-    }
-    impl PartialOrd for Hypervertex {
-        fn partial_cmp(&self, other: &Hypervertex) -> Option<std::cmp::Ordering> {
-            Some(self.cmp(other))
-        }
-    }
-    impl Ord for Hypervertex {
-        fn cmp(&self, other: &Hypervertex) -> std::cmp::Ordering {
-            self.pulverized_blocks.cmp(&other.pulverized_blocks)
-        }
-    }
-
-    let pulverized_bfs = |goalvec_ix: usize| -> usize {
-        let shapekey_goal_ix = goal_shapekey_key[goalvec_ix];
-        let goal_target_offset = &goal_target_offsets[goalvec_ix];
-        let nik_goal = &nonintersectionkey[shapekey_goal_ix];
-        let is_hyper_legal = |offsety: &Offset, pulverized_blocks: &PulverizedBlocks| -> bool {
-            for (ix, (shape_ix, shape_offset)) in nongoal_offset_vec.iter().enumerate() {
-                if pulverized_blocks[ix] {
-                    continue;
-                }
-                if !nonintersectionkey[*shape_ix][shape_offset.0 as usize][shape_offset.1 as usize]
-                    [shapekey_goal_ix][offsety.0 as usize][offsety.1 as usize]
-                {
-                    return false;
-                }
-            }
-            for (ix, (shape_ix, shape_offset)) in goal_offset_vec.iter().enumerate() {
-                if pulverized_blocks[nongoal_offset_vec_len + ix] {
-                    continue;
-                }
-                if !nonintersectionkey[*shape_ix][shape_offset.0 as usize][shape_offset.1 as usize]
-                    [shapekey_goal_ix][offsety.0 as usize][offsety.1 as usize]
-                {
-                    return false;
-                }
-            }
-            true
-        };
-        let hyper_dfs_subroutine = |offsets: &Offsets,
-                                    fringe: &Fringe,
-                                    pulverized_blocks: &PulverizedBlocks|
-         -> (Offsets, Fringe) {
-            let mut new_fringe = Fringe::new();
-            // must NOT include fringe, as fringe-nodes might be included in new fringe again
-            let mut seen_offsets: BTreeSet<Offset> = offsets.clone();
-            let mut new_offsets = offsets.clone();
-
-            let mut stack: Vec<Offset> = Vec::new();
-
-            for new_offset in fringe {
-                let hyper_legal = is_hyper_legal(&new_offset, &pulverized_blocks);
-
-                if hyper_legal {
-                    if seen_offsets.insert(new_offset.clone()) {
-                        new_offsets.insert(new_offset.clone());
-                        stack.push(new_offset.clone());
-                    }
-                } else {
-                    new_fringe.insert(new_offset.clone());
-                }
-            }
-
-            while let Some(new_offset) = stack.pop() {
-                // TODO: Maybe this can be made faster by not going back in
-                // the direction we just came from
-                for new_offset in [
-                    new_offset.up(),
-                    new_offset.down(),
-                    new_offset.left(),
-                    new_offset.right(),
-                ] {
-                    // TODO: This is still an awful hack to check in-boundsness
-                    let in_bounds =
-                        !nik_goal[new_offset.0 as usize][new_offset.1 as usize].is_empty();
-                    if !in_bounds {
-                        continue;
-                    }
-                    let hyper_legal = is_hyper_legal(&new_offset, &pulverized_blocks);
-
-                    if hyper_legal {
-                        if seen_offsets.insert(new_offset.clone()) {
-                            new_offsets.insert(new_offset.clone());
-                            stack.push(new_offset);
-                        }
-                    } else {
-                        new_fringe.insert(new_offset.clone());
-                    }
-                }
-            }
-
-            (new_offsets, new_fringe)
-        };
-
-        let mut start_hyper_pulverized_blocks = vec![false; total_len];
-        start_hyper_pulverized_blocks[goalvec_ix + nongoal_offset_vec_len] = true;
-
-        let mut starting_fringe = Fringe::new();
-        starting_fringe.insert(goal_offset_vec[goalvec_ix].1.clone());
-        let (start_hyper_offsets, start_hyper_fringe) = hyper_dfs_subroutine(
-            &Offsets::new(),
-            &starting_fringe,
-            &start_hyper_pulverized_blocks,
-        );
-
-        // Let's go, actual BFS
-        let start_hypervertex = Hypervertex {
-            pulverized_blocks: start_hyper_pulverized_blocks.clone(),
-            offsets: start_hyper_offsets,
-            fringe: start_hyper_fringe,
-        };
-
-        // TODO: Different data structures?
-        let mut seen_pulverizations: BTreeSet<PulverizedBlocks> = BTreeSet::new();
-        seen_pulverizations.insert(start_hyper_pulverized_blocks);
-        let mut hyper_queue = VecDeque::new();
-        hyper_queue.push_back(start_hypervertex);
-
-        while let Some(Hypervertex {
-            pulverized_blocks,
-            offsets,
-            fringe,
-        }) = hyper_queue.pop_front()
-        {
-            if offsets.contains(&goal_target_offset) {
-                return pulverized_blocks.iter().filter(|x| **x).count() - 1;
-            }
-
-            for offsety in fringe.iter() {
-                // Extract just one new_pulverized_ix from the offsety.
-                // TODO: This is weird code, gotos are generally uhh illegible? Sigh
-                let new_pulverized_ix: usize = 'pulverized: {
-                    for (ix, (shape_ix, shape_offset)) in nongoal_offset_vec.iter().enumerate() {
-                        if pulverized_blocks[ix] {
-                            continue;
-                        }
-                        if !nonintersectionkey[*shape_ix][shape_offset.0 as usize]
-                            [shape_offset.1 as usize][shapekey_goal_ix]
-                            [offsety.0 as usize][offsety.1 as usize]
-                        {
-                            break 'pulverized ix;
-                        }
-                    }
-                    for (ix, (shape_ix, shape_offset)) in goal_offset_vec.iter().enumerate() {
-                        let shifted_ix = nongoal_offset_vec_len + ix;
-                        if pulverized_blocks[shifted_ix] {
-                            continue;
-                        }
-                        if !nonintersectionkey[*shape_ix][shape_offset.0 as usize]
-                            [shape_offset.1 as usize][shapekey_goal_ix]
-                            [offsety.0 as usize][offsety.1 as usize]
-                        {
-                            break 'pulverized shifted_ix;
-                        }
-                    }
-                    return total_len; // TODO: This should never happen. Can this code be made cleaner?
-                };
-                let mut new_pulverized_blocks = pulverized_blocks.clone();
-                new_pulverized_blocks[new_pulverized_ix] = true;
-                if seen_pulverizations.insert(new_pulverized_blocks.clone()) {
-                    // DFS-subroutine to explore all the new spaces that can be accessed now
-                    // that we pulverized new_pulverized_ix:
-
-                    let (new_offsets, new_fringe) =
-                        hyper_dfs_subroutine(&offsets, &fringe, &new_pulverized_blocks);
-
-                    hyper_queue.push_back(Hypervertex {
-                        pulverized_blocks: new_pulverized_blocks,
-                        offsets: new_offsets,
-                        fringe: new_fringe,
-                    })
-                }
-            }
-        }
-        return usize::MAX; // TODO: Kinda bad if goal completely unreachable
-    };
-
-    // TODO: This unwrap is dangerous?
-    goal_offset_vec
-        .iter()
-        .enumerate()
-        .map(|(goalvec_ix, _)| pulverized_bfs(goalvec_ix))
-        .max()
-        .unwrap()
 }
 
 fn get_neighboring_blockstates(
@@ -951,46 +527,6 @@ fn print_puzzle(
     }
 }
 
-fn puzzle_bfs_with_path_reconstruction<F, G>(
-    blockstate: &Blockstate,
-    get_neighbors: F,
-    goal_check: G,
-) -> Option<Vec<Blockstate>>
-where
-    F: Fn(&Blockstate) -> Vec<Blockstate>,
-    G: Fn(&Blockstate) -> bool,
-{
-    let mut queue: VecDeque<Blockstate> = VecDeque::new();
-    // TODO: Better datastructures?
-    // TODO: Definitely not memory efficient, we should store pointers instead
-    let mut seen: HashMap<Blockstate, Option<Blockstate>> = HashMap::new();
-    queue.push_back(blockstate.clone());
-    seen.insert(blockstate.clone(), None);
-    while !queue.is_empty() {
-        let blockstate = queue.pop_front().unwrap();
-        if goal_check(&blockstate) {
-            let mut path: Vec<Blockstate> = vec![blockstate.clone()];
-            let mut curr = blockstate.clone();
-            while let Some(prev) = seen[&curr].clone() {
-                path.push(prev.clone());
-                curr = prev;
-            }
-            path.reverse();
-            return Some(path);
-        }
-        for neighbor in get_neighbors(&blockstate) {
-            match seen.entry(neighbor.clone()) {
-                Occupied(_) => (),
-                Vacant(entry) => {
-                    entry.insert(Some(blockstate.clone()));
-                    queue.push_back(neighbor);
-                }
-            }
-        }
-    }
-    None
-}
-
 fn puzzle_preprocessing(
     start: &str,
     goal: &str,
@@ -1001,7 +537,6 @@ fn puzzle_preprocessing(
     Nonintersectionkey,
     GoalShapekeyKey,
     GoalTargetOffsets,
-    MinkowskiDiams,
     Coor,
     Coor,
 ) {
@@ -1048,10 +583,7 @@ fn puzzle_preprocessing(
         let mut char_to_points: CharToPoints = CharToPoints::new();
         for (c, coor) in temp_points {
             let shifted_point = coor.sub(&shift); // !!!
-            char_to_points
-                .entry(c)
-                .or_insert_with(Points::new)
-                .insert(shifted_point);
+            char_to_points.entry(c).or_default().insert(shifted_point);
         }
 
         (char_to_points, width, height)
@@ -1074,7 +606,6 @@ fn puzzle_preprocessing(
 
     let (bounds, shapekey, start_blockstate, goal_shapekey_key, goal_target_offsets) =
         extract_shapekey(&start_chartocoors, &goal_chartocoors);
-    let minkowski_diams = get_minkowski_diams(&goal_shapekey_key, &shapekey);
     let nonintersectionkey = build_nonintersectionkey(&bounds, &shapekey, width, height);
 
     (
@@ -1084,7 +615,6 @@ fn puzzle_preprocessing(
         nonintersectionkey,
         goal_shapekey_key,
         goal_target_offsets,
-        minkowski_diams,
         width,
         height,
     )
@@ -1093,7 +623,7 @@ fn puzzle_preprocessing(
 // TODO: Implement A*
 // TODO: Add tests
 
-pub fn solve_puzzle_bfs(start: &str, goal: &str) {
+pub fn solve_puzzle(start: &str, goal: &str) {
     let (
         bounds,
         shapekey,
@@ -1101,98 +631,31 @@ pub fn solve_puzzle_bfs(start: &str, goal: &str) {
         nonintersectionkey,
         goal_shapekey_key,
         goal_target_offsets,
-        _minkowski_diams,
         width,
         height,
     ) = puzzle_preprocessing(start, goal);
-    /*
-    print_puzzle(
-        &bounds,
-        &shapekey,
-        &start_blockstate,
-        &goal_shapekey_key,
-        width,
-        height,
-    );
-    */
+
+    if false {
+        print_puzzle(
+            &bounds,
+            &shapekey,
+            &start_blockstate,
+            &goal_shapekey_key,
+            width,
+            height,
+        );
+    }
 
     let path = pathfinding::directed::bfs::bfs(
         &start_blockstate,
         |blockstate| {
-            get_neighboring_blockstates(&blockstate, &nonintersectionkey, &goal_shapekey_key)
-        },
-        |blockstate| blockstate.goal_offsets == goal_target_offsets,
-    )
-    .unwrap();
-
-    assert!(path.len() < 1000); // TODO: Remove this
-}
-
-pub fn solve_puzzle_astar(start: &str, goal: &str) {
-    let (
-        bounds,
-        shapekey,
-        start_blockstate,
-        nonintersectionkey,
-        goal_shapekey_key,
-        goal_target_offsets,
-        minkowski_diams,
-        width,
-        height,
-    ) = puzzle_preprocessing(start, goal);
-
-    /*
-    print_puzzle(
-        &bounds,
-        &shapekey,
-        &start_blockstate,
-        &goal_shapekey_key,
-        width,
-        height,
-    );
-    println!(
-        "Heuristic: {}",
-        heuristic(
-            &start_blockstate,
-            &nonintersectionkey,
-            &goal_shapekey_key,
-            &goal_target_offsets,
-            &minkowski_diams,
-            width,
-            height
-        )
-    );
-    println!(
-        "Tighter heuristic: {}",
-        tighter_heuristic(
-            &start_blockstate,
-            &nonintersectionkey,
-            &goal_shapekey_key,
-            &goal_target_offsets,
-        )
-    );
-    */
-
-    let (path, _) = pathfinding::directed::astar::astar(
-        &start_blockstate,
-        |blockstate| -> Vec<(Blockstate, usize)> {
             get_neighboring_blockstates(blockstate, &nonintersectionkey, &goal_shapekey_key)
-                .iter()
-                .map(|blockstate| (blockstate.clone(), 1)) // TODO: This is horrible?
-                .collect()
-        },
-        |blockstate| {
-            tighter_heuristic(
-                blockstate,
-                &nonintersectionkey,
-                &goal_shapekey_key,
-                &goal_target_offsets,
-            )
         },
         |blockstate| blockstate.goal_offsets == goal_target_offsets,
     )
     .unwrap();
 
-    println!("{:?}", path.len());
+    println!("{}", path.len() - 1);
+
     assert!(path.len() < 1000); // TODO: Remove this
 }
