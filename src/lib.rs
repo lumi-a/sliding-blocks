@@ -3,8 +3,7 @@ pub mod examples;
 use colored::{self, Colorize};
 use itertools::Itertools;
 use std::cmp::{max, min, Ordering};
-use std::collections::BTreeSet;
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 type Coor = u8;
 type Width = Coor;
@@ -80,7 +79,7 @@ impl From<&Point> for Offset {
 }
 
 type Offsets = BTreeSet<Offset>;
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct Blockstate {
     nongoal_offsets: Vec<Offsets>, // TODO: Perhaps this is better done on the stack, e.g. with https://crates.io/crates/arrayvec
     goal_offsets: Vec<Offset>,
@@ -359,7 +358,6 @@ fn print_puzzle(
             .collect();
         blocks.push(block);
     }
-    blocks.sort(); // ensures consistent indices
     let blocks = blocks;
 
     const IN_BLOCK: &str = "██";
