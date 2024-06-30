@@ -167,20 +167,6 @@ fn get_neighboring_blockstates(
     nonintersectionkey: &Nonintersectionkey,
     goal_shapekey_key: &GoalShapekeyKey,
 ) -> Vec<Blockstate> {
-    // TODO: Better-yet than the next todo, could we pass around the
-    // nik-intersections that are described in the next todo?
-    // Expressed in the context of Point-Sets rather than niks (and
-    // a concept still worth exploring if the idea doesn't work for niks,
-    // as it definitely *does* work for Point-Sets):
-    // - First, take the union U of all block-coordinates
-    // - To dfs a block, remove it from U, and test its legality by checking
-    //   if it shifted doesn't intersect U
-    //   (Should bounds be baked into U, or be kept in a separate union, or
-    //    should we maybe do nonintersectionkeys but just for bounds?)
-    // - And all this can be sped up in the future, because we can store
-    //   the union U in the blockstate, so that we don't have to calculate it
-    //   from scratch every time we call get_neighboring_blockstates!!
-
     // TODO: Create current nonintersections using dynamic programming:
     // In the end,
     //  `left_nonintersection[shape][i] ∩ right_nonintersection[shape][?-i]
