@@ -211,16 +211,60 @@ fn get_neighboring_blockstates(
         let mut legal_offsets: Vec<Offset> = Vec::new();
         let mut seen_offsets: BTreeSet<Offset> = BTreeSet::new(); // TODO: Different data structures?
         seen_offsets.insert(initial_offset.clone());
-        let mut stack: Vec<Offset> = vec![initial_offset];
-        while let Some(offset) = stack.pop() {
-            // TODO: Maybe this can be made faster by not going back in
-            // the direction we just came from
-            for new_offset in [offset.up(), offset.down(), offset.left(), offset.right()] {
+
+        // To eliminate backtracking:
+        enum CameFrom {
+            Up,
+            Down,
+            Left,
+            Right,
+        }
+
+        let mut stack: Vec<(Offset, CameFrom)> = Vec::new();
+
+        // Initial setup:
+        for (new_offset, new_dir) in [
+            (initial_offset.up(), CameFrom::Up),
+            (initial_offset.down(), CameFrom::Down),
+            (initial_offset.left(), CameFrom::Left),
+            (initial_offset.right(), CameFrom::Right),
+        ] {
+            // No need to check if seen_offsets contains them, as we know it won't
+            if is_legal(&new_offset) {
+                seen_offsets.insert(new_offset.clone());
+                legal_offsets.push(new_offset.clone());
+                stack.push((new_offset, new_dir));
+            }
+        }
+
+        while let Some((offset, dir)) = stack.pop() {
+            for (new_offset, new_dir) in match dir {
+                CameFrom::Up => [
+                    (offset.up(), CameFrom::Up),
+                    (offset.left(), CameFrom::Left),
+                    (offset.right(), CameFrom::Right),
+                ],
+                CameFrom::Down => [
+                    (offset.down(), CameFrom::Down),
+                    (offset.left(), CameFrom::Left),
+                    (offset.right(), CameFrom::Right),
+                ],
+                CameFrom::Left => [
+                    (offset.up(), CameFrom::Up),
+                    (offset.down(), CameFrom::Down),
+                    (offset.left(), CameFrom::Left),
+                ],
+                CameFrom::Right => [
+                    (offset.up(), CameFrom::Up),
+                    (offset.down(), CameFrom::Down),
+                    (offset.right(), CameFrom::Right),
+                ],
+            } {
                 // TODO: Can we check seen_offsets membership without cloning?
                 // TODO: Which of these checks is faster? And shouldn't we be using pathfinding::directed::dfs::dfs instead?
                 if is_legal(&new_offset) && seen_offsets.insert(new_offset.clone()) {
                     legal_offsets.push(new_offset.clone());
-                    stack.push(new_offset);
+                    stack.push((new_offset, new_dir));
                 }
             }
         }
