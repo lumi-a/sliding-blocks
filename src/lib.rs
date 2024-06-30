@@ -147,14 +147,18 @@ fn build_nonintersectionkey(
                                 nik_a_xy_b.push(nik_a_xy_b_xy);
                             }
                         }
+                        nik_a_xy_b.shrink_to_fit();
                         nik_a_xy.push(nik_a_xy_b);
                     }
                 }
+                nik_a_xy.shrink_to_fit();
                 nik_a.push(nik_a_xy);
             }
         }
+        nik_a.shrink_to_fit();
         nikvec.push(nik_a);
     }
+    nikvec.shrink_to_fit();
     Nonintersectionkey(width as usize + 2, nikvec)
 }
 
