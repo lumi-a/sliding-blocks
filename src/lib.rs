@@ -1,5 +1,6 @@
 pub mod examples;
 
+use bitvec::prelude::*;
 use colored::{self, Colorize};
 use itertools::Itertools;
 use std::cmp::{max, min, Ordering};
@@ -10,7 +11,6 @@ type Width = Coor;
 type Height = Coor;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-
 struct Point(Coor, Coor);
 // A "global" coordinate, in contrast to the Offset of a Shape
 impl Point {
@@ -90,26 +90,26 @@ struct Blockstate {
 type Shapekey = Vec<Shape>;
 type GoalShapekeyKey = Vec<usize>; // Given an index in the Blockstate.goal_blocks vec, what is the index of its shape in the shapekey vec?
 type GoalTargetOffsets = Vec<Offset>; // At what offset is a block in a goal-position?
-type Offsettable<T> = Vec<Vec<T>>;
-
-fn _intersect_coortables(a: &Offsettable<bool>, b: &Offsettable<bool>) -> Offsettable<bool> {
-    a.iter()
-        .zip(b)
-        .map(|(row_a, row_b)| {
-            row_a
-                .iter()
-                .zip(row_b)
-                .map(|(&elem_a, &elem_b)| elem_a && elem_b)
-                .collect()
-        })
-        .collect()
-}
 
 // Nonintersectionkey[ShapeA][CoordinatesA][ShapeB][CoordinatesB] == true iff:
 //   (ShapeA offset by CoordinatesA) ∩ (ShapeB offset by CoordinatesB) == ∅.
 // To save on memory, we always assume that (ShapeA offset by CoordinatesA) is in bounds.
 // This assumption will be satisfied when using the Nonintersectionkey in the algorithm.
-type Nonintersectionkey = Vec<Offsettable<Vec<Offsettable<bool>>>>;
+
+type ShapevecForNik<T> = Vec<T>;
+struct Nonintersectionkey(usize, ShapevecForNik<Vec<ShapevecForNik<BitVec>>>);
+impl std::ops::Index<(usize, &Offset, usize, &Offset)> for Nonintersectionkey {
+    type Output = bool;
+
+    #[inline]
+    fn index(
+        &self,
+        (shape_ix_a, Offset(xa, ya), shape_ix_b, Offset(xb, yb)): (usize, &Offset, usize, &Offset),
+    ) -> &Self::Output {
+        &self.1[shape_ix_a][*xa as usize + (*ya as usize) * self.0][shape_ix_b]
+            [*xb as usize + (*yb as usize) * self.0]
+    }
+}
 
 const BOUNDS_CHAR: char = '.';
 
@@ -121,13 +121,12 @@ fn build_nonintersectionkey(
 ) -> Nonintersectionkey {
     // Brace yourselves
 
-    let mut nik = Nonintersectionkey::new();
+    let mut nikvec: ShapevecForNik<Vec<ShapevecForNik<BitVec>>> = Vec::new();
     for shape_a in shapekey {
-        let mut nik_a: Offsettable<Vec<Offsettable<bool>>> = Offsettable::new();
-        for xa in 0..=(width + 1) {
-            let mut nik_ax: Vec<Vec<Offsettable<bool>>> = Vec::new();
-            for ya in 0..=(height + 1) {
-                let mut nik_axy: Vec<Offsettable<bool>> = Vec::new();
+        let mut nik_a: Vec<ShapevecForNik<BitVec>> = Vec::new();
+        for ya in 0..=(height + 1) {
+            for xa in 0..=(width + 1) {
+                let mut nik_a_xy: ShapevecForNik<BitVec> = ShapevecForNik::new();
                 let shift_a = Point(xa, ya);
 
                 // TODO: Extract into shift-function
@@ -135,31 +134,28 @@ fn build_nonintersectionkey(
                 if shifted_a.is_subset(bounds) {
                     // Let the fun begin
                     for shape_b in shapekey {
-                        let mut nik_axy_b: Offsettable<bool> = Offsettable::new();
-                        for xb in 0..=(width + 1) {
-                            let mut nik_axy_bx: Vec<bool> = Vec::new();
-                            for yb in 0..=(height + 1) {
+                        let mut nik_a_xy_b: BitVec = BitVec::new();
+                        for yb in 0..=(height + 1) {
+                            for xb in 0..=(width + 1) {
                                 let shift_b = Point(xb, yb);
                                 // TODO: Extract into shift-function
                                 let shifted_b: Points =
                                     shape_b.iter().map(|p| p.add(&shift_b)).collect();
 
-                                let nik_axy_bxy: bool = shifted_b.is_subset(bounds)
+                                let nik_a_xy_b_xy: bool = shifted_b.is_subset(bounds)
                                     && shifted_b.is_disjoint(&shifted_a);
-                                nik_axy_bx.push(nik_axy_bxy);
+                                nik_a_xy_b.push(nik_a_xy_b_xy);
                             }
-                            nik_axy_b.push(nik_axy_bx);
                         }
-                        nik_axy.push(nik_axy_b);
+                        nik_a_xy.push(nik_a_xy_b);
                     }
                 }
-                nik_ax.push(nik_axy);
+                nik_a.push(nik_a_xy);
             }
-            nik_a.push(nik_ax);
         }
-        nik.push(nik_a);
+        nikvec.push(nik_a);
     }
-    nik
+    Nonintersectionkey(width as usize + 2, nikvec)
 }
 
 fn get_neighboring_blockstates(
@@ -275,25 +271,19 @@ fn get_neighboring_blockstates(
                 for offset in shape_offsets {
                     // TODO: How bad are these "as usize" conversions?
                     // If they're really bad, I might just end up using usize as the type for Coor
-                    if !nonintersectionkey[shape_ix][offset.0 as usize][offset.1 as usize]
-                        [movingshape_ix][offsety.0 as usize][offsety.1 as usize]
-                    {
+                    if !nonintersectionkey[(shape_ix, offset, movingshape_ix, offsety)] {
                         return false;
                     }
                 }
             }
             for (goalvec_ix, offset) in blockstate.goal_offsets.iter().enumerate() {
-                let shapekey_ix = goal_shapekey_key[goalvec_ix];
-                if !nonintersectionkey[shapekey_ix][offset.0 as usize][offset.1 as usize]
-                    [movingshape_ix][offsety.0 as usize][offsety.1 as usize]
-                {
+                let shape_ix = goal_shapekey_key[goalvec_ix];
+                if !nonintersectionkey[(shape_ix, offset, movingshape_ix, offsety)] {
                     return false;
                 }
             }
             for offset in trimmed_movingshape_offsets {
-                if !nonintersectionkey[movingshape_ix][offset.0 as usize][offset.1 as usize]
-                    [movingshape_ix][offsety.0 as usize][offsety.1 as usize]
-                {
+                if !nonintersectionkey[(movingshape_ix, offset, movingshape_ix, offsety)] {
                     return false;
                 }
             }
@@ -304,7 +294,7 @@ fn get_neighboring_blockstates(
 
     let dfs_goal = |moving_goalvec_ix: usize, moving_offset: Offset| -> Vec<Offset> {
         let moving_shapekey_ix = goal_shapekey_key[moving_goalvec_ix];
-        let is_legal = |offsetty: &Offset| -> bool {
+        let is_legal = |offsety: &Offset| -> bool {
             // TODO: This function assumes there are other blocks on the field, because
             // we currently use their nonintersectionkeys to additionally verify that
             // offsety is in-bounds
@@ -312,9 +302,7 @@ fn get_neighboring_blockstates(
                 for offset in shape_offsets {
                     // TODO: How bad are these "as usize" conversions?
                     // If they're really bad, I might just end up using usize as the type for Coor
-                    if !nonintersectionkey[shape_ix][offset.0 as usize][offset.1 as usize]
-                        [moving_shapekey_ix][offsetty.0 as usize][offsetty.1 as usize]
-                    {
+                    if !nonintersectionkey[(shape_ix, offset, moving_shapekey_ix, offsety)] {
                         return false;
                     }
                 }
@@ -323,10 +311,8 @@ fn get_neighboring_blockstates(
                 if goalvec_ix == moving_goalvec_ix {
                     continue;
                 }
-                let shapekey_ix = goal_shapekey_key[goalvec_ix];
-                if !nonintersectionkey[shapekey_ix][offset.0 as usize][offset.1 as usize]
-                    [moving_shapekey_ix][offsetty.0 as usize][offsetty.1 as usize]
-                {
+                let shape_ix = goal_shapekey_key[goalvec_ix];
+                if !nonintersectionkey[(shape_ix, offset, moving_shapekey_ix, offsety)] {
                     return false;
                 }
             }
@@ -669,17 +655,6 @@ pub fn solve_puzzle(start: &str, goal: &str) {
         height,
     ) = puzzle_preprocessing(start, goal);
 
-    if false {
-        print_puzzle(
-            &bounds,
-            &shapekey,
-            &start_blockstate,
-            &goal_shapekey_key,
-            width,
-            height,
-        );
-    }
-
     let path = pathfinding::directed::bfs::bfs(
         &start_blockstate,
         |blockstate| {
@@ -689,7 +664,17 @@ pub fn solve_puzzle(start: &str, goal: &str) {
     )
     .unwrap();
 
-    // println!("{}", path.len() - 1);
+    if false {
+        print_puzzle(
+            &bounds,
+            &shapekey,
+            &start_blockstate,
+            &goal_shapekey_key,
+            width,
+            height,
+        );
+        println!("{}", path.len() - 1);
+    }
 
     assert!(path.len() < 1000); // TODO: Remove this
 }

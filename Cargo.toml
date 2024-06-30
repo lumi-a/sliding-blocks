@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+bitvec = "1.0.1"
 colored = "2.1.0"
 itertools = "0.13.0"
 ordered-float = "4.2.0"
