@@ -297,7 +297,7 @@ fn get_neighboring_blockstates(
     };
 
     let dfs_goal = |moving_goalvec_ix: usize, moving_offset: Offset| -> Vec<Offset> {
-        let moving_shapekey_ix = goal_shapekey_key[moving_goalvec_ix];
+        let moving_shape_ix = goal_shapekey_key[moving_goalvec_ix];
         let is_legal = |offsety: &Offset| -> bool {
             // TODO: This function assumes there are other blocks on the field, because
             // we currently use their nonintersectionkeys to additionally verify that
@@ -306,7 +306,7 @@ fn get_neighboring_blockstates(
                 for offset in shape_offsets {
                     // TODO: How bad are these "as usize" conversions?
                     // If they're really bad, I might just end up using usize as the type for Coor
-                    if !nonintersectionkey[(shape_ix, offset, moving_shapekey_ix, offsety)] {
+                    if !nonintersectionkey[(shape_ix, offset, moving_shape_ix, offsety)] {
                         return false;
                     }
                 }
@@ -316,7 +316,7 @@ fn get_neighboring_blockstates(
                     continue;
                 }
                 let shape_ix = goal_shapekey_key[goalvec_ix];
-                if !nonintersectionkey[(shape_ix, offset, moving_shapekey_ix, offsety)] {
+                if !nonintersectionkey[(shape_ix, offset, moving_shape_ix, offsety)] {
                     return false;
                 }
             }
@@ -337,16 +337,16 @@ fn get_neighboring_blockstates(
             neighboring_blockstates.push(new_blockstate);
         }
     }
-    for (shapekey_ix, offsets) in blockstate.nongoal_offsets.iter().enumerate() {
+    for (shape_ix, offsets) in blockstate.nongoal_offsets.iter().enumerate() {
         for offset in offsets.iter() {
             let mut trimmed_shape_offsets = offsets.clone();
             trimmed_shape_offsets.remove(offset);
             // TODO: avoid .clone() here?
-            for mutated_offset in dfs_nongoal(shapekey_ix, offset.clone(), &trimmed_shape_offsets) {
+            for mutated_offset in dfs_nongoal(shape_ix, offset.clone(), &trimmed_shape_offsets) {
                 let mut mutated_shape_offsets = trimmed_shape_offsets.clone();
                 mutated_shape_offsets.insert(mutated_offset);
                 let mut new_blockstate = blockstate.clone();
-                new_blockstate.nongoal_offsets[shapekey_ix] = mutated_shape_offsets;
+                new_blockstate.nongoal_offsets[shape_ix] = mutated_shape_offsets;
                 neighboring_blockstates.push(new_blockstate);
             }
         }
@@ -374,8 +374,8 @@ fn print_puzzle(
             blocks.push(block);
         }
     }
-    for (shapekey_ix, offset) in goal_shapekey_key.iter().zip(blockstate.goal_offsets.iter()) {
-        let block: Points = shapekey[*shapekey_ix]
+    for (shape_ix, offset) in goal_shapekey_key.iter().zip(blockstate.goal_offsets.iter()) {
+        let block: Points = shapekey[*shape_ix]
             .iter()
             .map(|p| p.add(&offset.into()))
             .collect();
