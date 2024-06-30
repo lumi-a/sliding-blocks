@@ -58,16 +58,19 @@ type Bounds = Shape; // min-x == 1, min-y == 1.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct Offset(Coor, Coor); // Should be >= (1, 1) for most offsets
 impl Offset {
-    // TODO: Should we #[inline] these?
+    #[inline]
     fn up(&self) -> Offset {
         Offset(self.0, self.1 + 1)
     }
+    #[inline]
     fn down(&self) -> Offset {
         Offset(self.0, self.1 - 1)
     }
+    #[inline]
     fn left(&self) -> Offset {
         Offset(self.0 - 1, self.1)
     }
+    #[inline]
     fn right(&self) -> Offset {
         Offset(self.0 + 1, self.1)
     }
@@ -81,7 +84,7 @@ impl From<&Point> for Offset {
 type Offsets = BTreeSet<Offset>;
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct Blockstate {
-    nongoal_offsets: Vec<Offsets>, // TODO: Perhaps this is better done on the stack, e.g. with https://crates.io/crates/arrayvec
+    nongoal_offsets: Vec<Offsets>,
     goal_offsets: Vec<Offset>,
 }
 type Shapekey = Vec<Shape>;
