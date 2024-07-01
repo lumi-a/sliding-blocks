@@ -4,7 +4,7 @@ use bitvec::prelude::*;
 use colored::{self, Colorize};
 use itertools::Itertools;
 use std::cmp::{max, min, Ordering};
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap};
 
 type Coor = u8;
 type Width = Coor;
