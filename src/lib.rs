@@ -166,7 +166,7 @@ fn get_neighboring_blockstates(
     blockstate: &Blockstate,
     nonintersectionkey: &Nonintersectionkey,
     goal_shapekey_key: &GoalShapekeyKey,
-) -> Vec<(Blockstate, usize)> {
+) -> Vec<(Blockstate)> {
     // TODO: I have no idea if `&dyn Fn(Offset) -> bool` is the right signature as I didn't learn about `&dyn` yet
     let dfs_general = |initial_offset: Offset, is_legal: &dyn Fn(&Offset) -> bool| {
         let mut legal_offsets: Vec<Offset> = Vec::new();
@@ -299,14 +299,14 @@ fn get_neighboring_blockstates(
 
     // It's okay to gather all these into a vector rather than a set,
     // because all neighbors WILL be unique.
-    let mut neighboring_blockstates: Vec<(Blockstate, usize)> = Vec::new();
+    let mut neighboring_blockstates: Vec<(Blockstate)> = Vec::new();
     // Start with blockstate.goal_offsets first, to hopefully find the goal a little sooner
     for (goalvec_ix, offset) in blockstate.goal_offsets.iter().enumerate() {
         // TODO: avoid .clone() here?
         for mutated_offset in dfs_goal(goalvec_ix, offset.clone()) {
             let mut new_blockstate = blockstate.clone();
             new_blockstate.goal_offsets[goalvec_ix] = mutated_offset;
-            neighboring_blockstates.push((new_blockstate, 1));
+            neighboring_blockstates.push(new_blockstate);
         }
     }
     for (shape_ix, offsets) in blockstate.nongoal_offsets.iter().enumerate() {
@@ -319,7 +319,7 @@ fn get_neighboring_blockstates(
                 mutated_shape_offsets.insert(mutated_offset);
                 let mut new_blockstate = blockstate.clone();
                 new_blockstate.nongoal_offsets[shape_ix] = mutated_shape_offsets;
-                neighboring_blockstates.push((new_blockstate, 1));
+                neighboring_blockstates.push(new_blockstate);
             }
         }
     }
@@ -644,26 +644,31 @@ pub fn solve_puzzle(start: &str, goal: &str) -> usize {
         height,
     ) = puzzle_preprocessing(start, goal);
 
-    /*
-    let path = pathfinding::directed::bfs::bfs(
-        &start_blockstate,
-        |blockstate| {
-            get_neighboring_blockstates(blockstate, &nonintersectionkey, &goal_shapekey_key)
-        },
-        |blockstate| blockstate.goal_offsets == goal_target_offsets,
-    )
-    .unwrap();
-    */
-    let path = pathfinding::directed::astar::astar(
-        &start_blockstate,
-        |blockstate| {
-            get_neighboring_blockstates(blockstate, &nonintersectionkey, &goal_shapekey_key)
-        },
-        |blockstate| heuristic(blockstate, &goal_target_offsets),
-        |blockstate| blockstate.goal_offsets == goal_target_offsets,
-    )
-    .unwrap()
-    .0;
+    let path = if goal_shapekey_key.len() > 1 {
+        pathfinding::directed::astar::astar(
+            &start_blockstate,
+            |blockstate| {
+                // TODO: More performant solution than using into_iter?
+                get_neighboring_blockstates(blockstate, &nonintersectionkey, &goal_shapekey_key)
+                    .into_iter()
+                    .map(|blockstate| (blockstate, 1))
+                    .collect_vec()
+            },
+            |blockstate| heuristic(blockstate, &goal_target_offsets),
+            |blockstate| blockstate.goal_offsets == goal_target_offsets,
+        )
+        .unwrap()
+        .0
+    } else {
+        pathfinding::directed::bfs::bfs(
+            &start_blockstate,
+            |blockstate| {
+                get_neighboring_blockstates(blockstate, &nonintersectionkey, &goal_shapekey_key)
+            },
+            |blockstate| blockstate.goal_offsets == goal_target_offsets,
+        )
+        .unwrap()
+    };
 
     assert!(path.len() < 1000); // TODO: Remove this
 
