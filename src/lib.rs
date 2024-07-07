@@ -90,7 +90,6 @@ struct Blockstate {
 type Shapekey = Vec<Shape>;
 type GoalShapekeyKey = Vec<usize>; // Given an index in the Blockstate.goal_blocks vec, what is the index of its shape in the shapekey vec?
 type GoalTargetOffsets = Vec<Offset>; // At what offset is a block in a goal-position?
-type GoalMaxDist = Vec<usize>; // Maximum distance a goal block can have from its target
 
 // Nonintersectionkey[ShapeA][CoordinatesA][ShapeB][CoordinatesB] == true iff:
 //   (ShapeA offset by CoordinatesA) ∩ (ShapeB offset by CoordinatesB) == ∅.
@@ -394,7 +393,6 @@ fn puzzle_preprocessing(
     Nonintersectionkey,
     GoalShapekeyKey,
     GoalTargetOffsets,
-    GoalMaxDist,
     Coor,
     Coor,
 ) {
@@ -468,7 +466,6 @@ fn puzzle_preprocessing(
         Blockstate,
         GoalShapekeyKey,
         GoalTargetOffsets,
-        GoalMaxDist,
     ) {
         // TODO: Handle empty strings gracefully
         // TODO: Also maybe don't use clone, but I'm not into ownership enough to think through how to handle this
@@ -595,41 +592,16 @@ fn puzzle_preprocessing(
             .collect_vec();
         goal_target_offsets.shrink_to_fit();
 
-        fn taxicab(a: &Point, b: &Offset) -> usize {
-            (a.0.abs_diff(b.0) + a.1.abs_diff(b.1)) as usize
-        }
-        // TODO: This could be done more efficiently in the build_nonintersectionkey function,
-        // but that one's performance overshadows this for now
-        let mut goal_max_dist: GoalMaxDist = goal_target_offsets
-            .iter()
-            .enumerate()
-            .map(|(goalvec_ix, target_offset)| {
-                let goalshape: Shape = shapekey[goal_shapekey_key[goalvec_ix]].clone();
-                bounds
-                    .iter()
-                    .filter(|offset| {
-                        let shifted_goalshape: Shape =
-                            goalshape.iter().map(|p| p.add(offset)).collect();
-                        shifted_goalshape.is_subset(&bounds)
-                    })
-                    .map(|offset| taxicab(&offset, &target_offset))
-                    .max()
-                    .unwrap_or(0)
-            })
-            .collect_vec();
-        goal_max_dist.shrink_to_fit();
-
         (
             bounds,
             shapekey,
             blockstate,
             goal_shapekey_key,
             goal_target_offsets,
-            goal_max_dist,
         )
     }
 
-    let (bounds, shapekey, start_blockstate, goal_shapekey_key, goal_target_offsets, goal_max_dist) =
+    let (bounds, shapekey, start_blockstate, goal_shapekey_key, goal_target_offsets) =
         extract_auxiliaries(&start_chartocoors, &goal_chartocoors);
     let nonintersectionkey = build_nonintersectionkey(&bounds, &shapekey, width, height);
 
@@ -640,17 +612,12 @@ fn puzzle_preprocessing(
         nonintersectionkey,
         goal_shapekey_key,
         goal_target_offsets,
-        goal_max_dist,
         width,
         height,
     )
 }
 
-fn heuristic(
-    blockstate: &Blockstate,
-    goal_target_offsets: &GoalTargetOffsets,
-    goal_max_dist: &GoalMaxDist,
-) -> usize {
+fn heuristic(blockstate: &Blockstate, goal_target_offsets: &GoalTargetOffsets) -> usize {
     blockstate
         .goal_offsets
         .iter()
@@ -669,7 +636,6 @@ pub fn solve_puzzle(start: &str, goal: &str) {
         nonintersectionkey,
         goal_shapekey_key,
         goal_target_offsets,
-        goal_max_dist,
         width,
         height,
     ) = puzzle_preprocessing(start, goal);
@@ -689,7 +655,7 @@ pub fn solve_puzzle(start: &str, goal: &str) {
         |blockstate| {
             get_neighboring_blockstates(blockstate, &nonintersectionkey, &goal_shapekey_key)
         },
-        |blockstate| heuristic(blockstate, &goal_target_offsets, &goal_max_dist),
+        |blockstate| heuristic(blockstate, &goal_target_offsets),
         |blockstate| blockstate.goal_offsets == goal_target_offsets,
     )
     .unwrap()
