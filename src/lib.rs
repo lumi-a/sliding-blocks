@@ -34,6 +34,7 @@ impl From<&Offset> for Point {
 
 type Points = BTreeSet<Point>;
 type CharToPoints = HashMap<char, Points>;
+type ReconstructionMap = HashMap<(Shape, Offset), char>;
 
 type Shape = BTreeSet<Point>; // nonempty. min-x == 0, min-y == 0
 
@@ -397,8 +398,9 @@ fn puzzle_preprocessing(
     Nonintersectionkey,
     GoalShapekeyKey,
     GoalTargetOffsets,
-    Coor,
-    Coor,
+    ReconstructionMap,
+    Width,
+    Height,
 ) {
     fn string_to_chartocoors(s: &str) -> (CharToPoints, Width, Height) {
         let mut min_x = Coor::MAX;
@@ -470,6 +472,7 @@ fn puzzle_preprocessing(
         Blockstate,
         GoalShapekeyKey,
         GoalTargetOffsets,
+        ReconstructionMap,
     ) {
         // TODO: Handle empty strings gracefully
         // TODO: Also maybe don't use clone, but I'm not into ownership enough to think through how to handle this
@@ -477,6 +480,7 @@ fn puzzle_preprocessing(
 
         let mut char_to_shape: HashMap<char, Shape> = HashMap::new();
         let mut shape_to_chars_and_offsets: HashMap<Shape, Vec<(char, Offset)>> = HashMap::new();
+        let mut start_reconstruction_map: ReconstructionMap = ReconstructionMap::new();
         let mut goal_chars_startoffset_targetoffset: Vec<(char, Offset, Offset)> = Vec::new();
         for (c, start_points) in start_chartopoints.iter() {
             if c == &BOUNDS_CHAR {
@@ -493,9 +497,11 @@ fn puzzle_preprocessing(
             char_to_shape.insert(*c, shape.clone());
 
             shape_to_chars_and_offsets
-                .entry(shape)
+                .entry(shape.clone())
                 .or_default()
                 .push((*c, (&shape_min).into()));
+            start_reconstruction_map.insert((shape, (&shape_min).into()), *c);
+
             if let Some(goal_points) = goal_chartopoints.get(c) {
                 // TODO: Because we're currently in the start-loop, and won't separately
                 // do a goal-loop, we'll silently ignore any characters in the goalstring
@@ -602,11 +608,18 @@ fn puzzle_preprocessing(
             blockstate,
             goal_shapekey_key,
             goal_target_offsets,
+            start_reconstruction_map,
         )
     }
 
-    let (bounds, shapekey, start_blockstate, goal_shapekey_key, goal_target_offsets) =
-        extract_auxiliaries(&start_chartocoors, &goal_chartocoors);
+    let (
+        bounds,
+        shapekey,
+        start_blockstate,
+        goal_shapekey_key,
+        goal_target_offsets,
+        reconstruction_map,
+    ) = extract_auxiliaries(&start_chartocoors, &goal_chartocoors);
     let nonintersectionkey = build_nonintersectionkey(&bounds, &shapekey, width, height);
 
     (
@@ -616,6 +629,7 @@ fn puzzle_preprocessing(
         nonintersectionkey,
         goal_shapekey_key,
         goal_target_offsets,
+        reconstruction_map,
         width,
         height,
     )
@@ -641,7 +655,7 @@ fn misplaced_goalblocks_heuristic(
 // TODO: Add tests
 
 #[wasm_bindgen]
-pub fn solve_puzzle(start: &str, goal: &str) -> usize {
+pub fn solve_puzzle(start: &str, goal: &str) -> Vec<String> {
     let (
         bounds,
         shapekey,
@@ -649,6 +663,7 @@ pub fn solve_puzzle(start: &str, goal: &str) -> usize {
         nonintersectionkey,
         goal_shapekey_key,
         goal_target_offsets,
+        start_reconstruction_map,
         width,
         height,
     ) = puzzle_preprocessing(start, goal);
@@ -681,7 +696,83 @@ pub fn solve_puzzle(start: &str, goal: &str) -> usize {
         .unwrap()
     };
 
-    assert!(path.len() < 1000); // TODO: Remove this
+    // Reconstruct path
+    let reconstruction_map_to_string = |rm: &ReconstructionMap| -> String {
+        let mut board: Vec<Vec<char>> = vec![vec![' '; width as usize]; height as usize];
+        for offset in &bounds {
+            board[(offset.1 - 1) as usize][(offset.0 - 1) as usize] = BOUNDS_CHAR;
+        }
 
-    path.len() - 1
+        for ((Shape, offset), c) in rm.iter() {
+            for Point(x, y) in Shape.iter() {
+                board[(y + offset.1 - 1) as usize][(x + offset.0 - 1) as usize] = *c;
+            }
+        }
+
+        board
+            .iter()
+            .map(|row| row.iter().collect::<String>())
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    let mut reconstruction_map = start_reconstruction_map;
+    let mut string_path = vec![reconstruction_map_to_string(&reconstruction_map)];
+    let mut previous_blockstate = &path[0];
+    for blockstate in path.iter().skip(1) {
+        'check_single_block: {
+            // nongoal-blocks
+            for (shape_ix, (offsets, previous_offsets)) in blockstate
+                .nongoal_offsets
+                .iter()
+                .zip(previous_blockstate.nongoal_offsets.iter())
+                .enumerate()
+            {
+                if *offsets != *previous_offsets {
+                    // TODO: Probably safe unwrap, but still, maybe handle this more gracefully
+                    let old_offset = previous_offsets.difference(offsets).next().unwrap();
+                    let new_offset = offsets.difference(previous_offsets).next().unwrap();
+                    let shape = &shapekey[shape_ix];
+
+                    // TODO: This is sooo ugly
+                    let c = reconstruction_map
+                        .remove(&(shape.clone(), old_offset.clone()))
+                        .unwrap();
+
+                    reconstruction_map.insert((shape.clone(), new_offset.clone()), c);
+
+                    break 'check_single_block;
+                }
+            }
+
+            // goal-blocks
+            for (goalvec_ix, (offset, previous_offset)) in blockstate
+                .goal_offsets
+                .iter()
+                .zip(previous_blockstate.goal_offsets.iter())
+                .enumerate()
+            {
+                if *offset != *previous_offset {
+                    // TODO: Probably safe unwrap, but still, maybe handle this more gracefully
+                    let old_offset = previous_offset;
+                    let new_offset = offset;
+                    let shape = &shapekey[goal_shapekey_key[goalvec_ix]];
+
+                    // TODO: This is sooo ugly
+                    let c = reconstruction_map
+                        .remove(&(shape.clone(), old_offset.clone()))
+                        .unwrap();
+
+                    reconstruction_map.insert((shape.clone(), new_offset.clone()), c);
+
+                    break 'check_single_block;
+                }
+            }
+        }
+        // TODO: Maybe check if reconstruction_map changed at all?
+        string_path.push(reconstruction_map_to_string(&reconstruction_map));
+
+        previous_blockstate = blockstate;
+    }
+
+    string_path
 }
