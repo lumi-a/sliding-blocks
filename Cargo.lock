@@ -517,6 +517,7 @@ dependencies = [
  "itertools 0.13.0",
  "ordered-float",
  "pathfinding",
+ "wasm-bindgen",
 ]
 
 [[package]]

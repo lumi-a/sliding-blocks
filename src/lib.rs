@@ -5,6 +5,7 @@ use colored::{self, Colorize};
 use itertools::Itertools;
 use std::cmp::{max, min, Ordering};
 use std::collections::{BTreeSet, HashMap};
+use wasm_bindgen::prelude::*;
 
 type Coor = u8;
 type Width = Coor;
@@ -639,6 +640,7 @@ fn misplaced_goalblocks_heuristic(
 
 // TODO: Add tests
 
+#[wasm_bindgen]
 pub fn solve_puzzle(start: &str, goal: &str) -> usize {
     let (
         bounds,
