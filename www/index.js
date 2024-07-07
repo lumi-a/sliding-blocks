@@ -1,3 +1,9 @@
-import * as wasm from "hello-wasm-pack";
+import { solve_puzzle } from "sliding-blocks"
 
-wasm.greet();
+console.log(solve_puzzle(`
+    a.b
+     .
+`, `
+    b.a
+     .
+`))
