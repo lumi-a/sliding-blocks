@@ -468,6 +468,7 @@ fn puzzle_preprocessing(
         Blockstate,
         GoalShapekeyKey,
         GoalTargetOffsets,
+        GoalMaxDist,
     ) {
         // TODO: Handle empty strings gracefully
         // TODO: Also maybe don't use clone, but I'm not into ownership enough to think through how to handle this
@@ -594,16 +595,41 @@ fn puzzle_preprocessing(
             .collect_vec();
         goal_target_offsets.shrink_to_fit();
 
+        fn taxicab(a: &Point, b: &Offset) -> usize {
+            (a.0.abs_diff(b.0) + a.1.abs_diff(b.1)) as usize
+        }
+        // TODO: This could be done more efficiently in the build_nonintersectionkey function,
+        // but that one's performance overshadows this for now
+        let mut goal_max_dist: GoalMaxDist = goal_target_offsets
+            .iter()
+            .enumerate()
+            .map(|(goalvec_ix, target_offset)| {
+                let goalshape: Shape = shapekey[goal_shapekey_key[goalvec_ix]].clone();
+                bounds
+                    .iter()
+                    .filter(|offset| {
+                        let shifted_goalshape: Shape =
+                            goalshape.iter().map(|p| p.add(offset)).collect();
+                        shifted_goalshape.is_subset(&bounds)
+                    })
+                    .map(|offset| taxicab(&offset, &target_offset))
+                    .max()
+                    .unwrap_or(0)
+            })
+            .collect_vec();
+        goal_max_dist.shrink_to_fit();
+
         (
             bounds,
             shapekey,
             blockstate,
             goal_shapekey_key,
             goal_target_offsets,
+            goal_max_dist,
         )
     }
 
-    let (bounds, shapekey, start_blockstate, goal_shapekey_key, goal_target_offsets) =
+    let (bounds, shapekey, start_blockstate, goal_shapekey_key, goal_target_offsets, goal_max_dist) =
         extract_auxiliaries(&start_chartocoors, &goal_chartocoors);
     let nonintersectionkey = build_nonintersectionkey(&bounds, &shapekey, width, height);
 
@@ -614,6 +640,7 @@ fn puzzle_preprocessing(
         nonintersectionkey,
         goal_shapekey_key,
         goal_target_offsets,
+        goal_max_dist,
         width,
         height,
     )
@@ -629,6 +656,7 @@ pub fn solve_puzzle(start: &str, goal: &str) {
         nonintersectionkey,
         goal_shapekey_key,
         goal_target_offsets,
+        goal_max_dist,
         width,
         height,
     ) = puzzle_preprocessing(start, goal);
