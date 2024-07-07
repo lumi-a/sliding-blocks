@@ -618,6 +618,10 @@ fn puzzle_preprocessing(
 }
 
 fn heuristic(blockstate: &Blockstate, goal_target_offsets: &GoalTargetOffsets) -> usize {
+    // You might think that, rather than just counting the misplaced blocks,
+    // we could also check their distance from their goal_target_offsets.
+    // I implemented and benchmarked that, and it was worse than this.
+
     blockstate
         .goal_offsets
         .iter()
@@ -628,7 +632,7 @@ fn heuristic(blockstate: &Blockstate, goal_target_offsets: &GoalTargetOffsets) -
 
 // TODO: Add tests
 
-pub fn solve_puzzle(start: &str, goal: &str) {
+pub fn solve_puzzle(start: &str, goal: &str) -> usize {
     let (
         bounds,
         shapekey,
@@ -661,17 +665,7 @@ pub fn solve_puzzle(start: &str, goal: &str) {
     .unwrap()
     .0;
 
-    if false {
-        print_puzzle(
-            &bounds,
-            &shapekey,
-            &start_blockstate,
-            &goal_shapekey_key,
-            width,
-            height,
-        );
-        println!("{}", path.len() - 1);
-    }
-
     assert!(path.len() < 1000); // TODO: Remove this
+
+    return path.len() - 1;
 }
