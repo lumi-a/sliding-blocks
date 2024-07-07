@@ -1,11 +1,5 @@
 import { solve_puzzle } from "sliding-blocks"
 
-class Block {
-    constructor(shape, offset) {
-        this.shape = shape
-    }
-}
-
 let solution = solve_puzzle(`
     a.b
      .
