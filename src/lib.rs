@@ -90,6 +90,7 @@ struct Blockstate {
 type Shapekey = Vec<Shape>;
 type GoalShapekeyKey = Vec<usize>; // Given an index in the Blockstate.goal_blocks vec, what is the index of its shape in the shapekey vec?
 type GoalTargetOffsets = Vec<Offset>; // At what offset is a block in a goal-position?
+type GoalMaxDist = Vec<usize>; // Maximum distance a goal block can have from its target
 
 // Nonintersectionkey[ShapeA][CoordinatesA][ShapeB][CoordinatesB] == true iff:
 //   (ShapeA offset by CoordinatesA) ∩ (ShapeB offset by CoordinatesB) == ∅.
@@ -393,6 +394,7 @@ fn puzzle_preprocessing(
     Nonintersectionkey,
     GoalShapekeyKey,
     GoalTargetOffsets,
+    GoalMaxDist,
     Coor,
     Coor,
 ) {
