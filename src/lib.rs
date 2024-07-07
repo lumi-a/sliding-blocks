@@ -119,6 +119,9 @@ fn build_nonintersectionkey(
     width: Width,
     height: Height,
 ) -> Nonintersectionkey {
+    // TODO: This can be done faster by first storing the relative offsets for which the
+    // nik is true, and then filling in the actual nik.
+
     // Brace yourselves
 
     let mut nikvec: ShapevecForNik<Vec<ShapevecForNik<BitVec>>> = Vec::new();
@@ -166,7 +169,7 @@ fn get_neighboring_blockstates(
     blockstate: &Blockstate,
     nonintersectionkey: &Nonintersectionkey,
     goal_shapekey_key: &GoalShapekeyKey,
-) -> Vec<(Blockstate)> {
+) -> Vec<Blockstate> {
     // TODO: I have no idea if `&dyn Fn(Offset) -> bool` is the right signature as I didn't learn about `&dyn` yet
     let dfs_general = |initial_offset: Offset, is_legal: &dyn Fn(&Offset) -> bool| {
         let mut legal_offsets: Vec<Offset> = Vec::new();
@@ -299,7 +302,7 @@ fn get_neighboring_blockstates(
 
     // It's okay to gather all these into a vector rather than a set,
     // because all neighbors WILL be unique.
-    let mut neighboring_blockstates: Vec<(Blockstate)> = Vec::new();
+    let mut neighboring_blockstates: Vec<Blockstate> = Vec::new();
     // Start with blockstate.goal_offsets first, to hopefully find the goal a little sooner
     for (goalvec_ix, offset) in blockstate.goal_offsets.iter().enumerate() {
         // TODO: avoid .clone() here?
@@ -678,5 +681,5 @@ pub fn solve_puzzle(start: &str, goal: &str) -> usize {
 
     assert!(path.len() < 1000); // TODO: Remove this
 
-    return path.len() - 1;
+    path.len() - 1
 }
