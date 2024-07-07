@@ -1,9 +1,12 @@
 import { solve_puzzle } from "sliding-blocks"
 
-console.log(solve_puzzle(`
+let solution = solve_puzzle(`
     a.b
      .
 `, `
     b.a
      .
-`))
+`)
+for (let step of solution) {
+    console.log(step)
+}
