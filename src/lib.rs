@@ -167,7 +167,7 @@ fn get_neighboring_blockstates(
     blockstate: &Blockstate,
     nonintersectionkey: &Nonintersectionkey,
     goal_shapekey_key: &GoalShapekeyKey,
-) -> Vec<Blockstate> {
+) -> Vec<(Blockstate, usize)> {
     // TODO: I have no idea if `&dyn Fn(Offset) -> bool` is the right signature as I didn't learn about `&dyn` yet
     let dfs_general = |initial_offset: Offset, is_legal: &dyn Fn(&Offset) -> bool| {
         let mut legal_offsets: Vec<Offset> = Vec::new();
@@ -300,14 +300,14 @@ fn get_neighboring_blockstates(
 
     // It's okay to gather all these into a vector rather than a set,
     // because all neighbors WILL be unique.
-    let mut neighboring_blockstates: Vec<Blockstate> = Vec::new();
+    let mut neighboring_blockstates: Vec<(Blockstate, usize)> = Vec::new();
     // Start with blockstate.goal_offsets first, to hopefully find the goal a little sooner
     for (goalvec_ix, offset) in blockstate.goal_offsets.iter().enumerate() {
         // TODO: avoid .clone() here?
         for mutated_offset in dfs_goal(goalvec_ix, offset.clone()) {
             let mut new_blockstate = blockstate.clone();
             new_blockstate.goal_offsets[goalvec_ix] = mutated_offset;
-            neighboring_blockstates.push(new_blockstate);
+            neighboring_blockstates.push((new_blockstate, 1));
         }
     }
     for (shape_ix, offsets) in blockstate.nongoal_offsets.iter().enumerate() {
@@ -320,7 +320,7 @@ fn get_neighboring_blockstates(
                 mutated_shape_offsets.insert(mutated_offset);
                 let mut new_blockstate = blockstate.clone();
                 new_blockstate.nongoal_offsets[shape_ix] = mutated_shape_offsets;
-                neighboring_blockstates.push(new_blockstate);
+                neighboring_blockstates.push((new_blockstate, 1));
             }
         }
     }
@@ -646,6 +646,19 @@ fn puzzle_preprocessing(
     )
 }
 
+fn heuristic(
+    blockstate: &Blockstate,
+    goal_target_offsets: &GoalTargetOffsets,
+    goal_max_dist: &GoalMaxDist,
+) -> usize {
+    blockstate
+        .goal_offsets
+        .iter()
+        .zip(goal_target_offsets)
+        .filter(|(goal_offset, target_offset)| goal_offset != target_offset)
+        .count()
+}
+
 // TODO: Add tests
 
 pub fn solve_puzzle(start: &str, goal: &str) {
@@ -661,6 +674,7 @@ pub fn solve_puzzle(start: &str, goal: &str) {
         height,
     ) = puzzle_preprocessing(start, goal);
 
+    /*
     let path = pathfinding::directed::bfs::bfs(
         &start_blockstate,
         |blockstate| {
@@ -669,6 +683,17 @@ pub fn solve_puzzle(start: &str, goal: &str) {
         |blockstate| blockstate.goal_offsets == goal_target_offsets,
     )
     .unwrap();
+    */
+    let path = pathfinding::directed::astar::astar(
+        &start_blockstate,
+        |blockstate| {
+            get_neighboring_blockstates(blockstate, &nonintersectionkey, &goal_shapekey_key)
+        },
+        |blockstate| heuristic(blockstate, &goal_target_offsets, &goal_max_dist),
+        |blockstate| blockstate.goal_offsets == goal_target_offsets,
+    )
+    .unwrap()
+    .0;
 
     if false {
         print_puzzle(
