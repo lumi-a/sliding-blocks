@@ -617,7 +617,11 @@ fn puzzle_preprocessing(
     )
 }
 
-fn heuristic(blockstate: &Blockstate, goal_target_offsets: &GoalTargetOffsets) -> usize {
+// TODO: Prove admissibility
+fn misplaced_goalblocks_heuristic(
+    blockstate: &Blockstate,
+    goal_target_offsets: &GoalTargetOffsets,
+) -> usize {
     // You might think that, rather than just counting the misplaced blocks,
     // we could also check their distance from their goal_target_offsets.
     // I implemented and benchmarked that, and it was worse than this.
@@ -644,6 +648,8 @@ pub fn solve_puzzle(start: &str, goal: &str) -> usize {
         height,
     ) = puzzle_preprocessing(start, goal);
 
+    // If we have more than one goalblock, an astar heuristic helps speed things up.
+    // Otherwise, default to usual bfs
     let path = if goal_shapekey_key.len() > 1 {
         pathfinding::directed::astar::astar(
             &start_blockstate,
@@ -654,7 +660,7 @@ pub fn solve_puzzle(start: &str, goal: &str) -> usize {
                     .map(|blockstate| (blockstate, 1))
                     .collect_vec()
             },
-            |blockstate| heuristic(blockstate, &goal_target_offsets),
+            |blockstate| misplaced_goalblocks_heuristic(blockstate, &goal_target_offsets),
             |blockstate| blockstate.goal_offsets == goal_target_offsets,
         )
         .unwrap()
