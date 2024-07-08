@@ -26,110 +26,64 @@ const scale = (v: Point, s: number) => p(x(v) * s, y(v) * s)
 type Shape = Set<Point>
 type Offset = Point
 
-const PATH_CORNER_RADIUS = 0.1
 function shape_to_path(shape: Shape) {
-    enum Dir {
-        Up,
-        Down,
-        Left,
-        Right
-    }
-    interface EdgePoint {
-        point: Point,
-        dir: Dir // Invariant: You're always touching `shape` with your right hand
-    }
-    let edgepoints = new Collections.Set<EdgePoint>()
+    type Edgepoint = Point
+    const DIRS = [p(1, 0), p(0, -1), p(-1, 0), p(0, 1)]
+    let edgepoint_to_dir: Map<Edgepoint, number> = new Map()
     shape.forEach(point => {
-        const left = add(point, { x: -1, y: 0 })
-        const right = add(point, { x: +1, y: 0 })
-        const up = add(point, { x: 0, y: -1 })
-        const down = add(point, { x: 0, y: 1 })
-        if (!shape.contains(left)) {
-            edgepoints.add({ point: add(point, { x: -0.5, y: 0 }), dir: Dir.Up })
+        const left = shiftTuple(point, -1, 0)
+        const right = shiftTuple(point, 1, 0)
+        const up = shiftTuple(point, 0, -1)
+        const down = shiftTuple(point, 0, 1)
+        // We maintain the invariant that we touch the shape with
+        // our right hand. So if we're moving upwards, the shape
+        // is not on the left:
+        if (!shape.has(left)) {
+            edgepoint_to_dir.set(shiftTuple(point, -0.5, 0), 1)
         }
-        if (!shape.contains(right)) {
-            edgepoints.add({ point: add(point, { x: +0.5, y: 0 }), dir: Dir.Down })
+        if (!shape.has(right)) {
+            edgepoint_to_dir.set(shiftTuple(point, 0.5, 0), 3)
         }
-        if (!shape.contains(up)) {
-            edgepoints.add({ point: add(point, { x: 0, y: -0.5 }), dir: Dir.Right })
+        if (!shape.has(up)) {
+            edgepoint_to_dir.set(shiftTuple(point, 0, -0.5), 0)
         }
-        if (!shape.contains(down)) {
-            edgepoints.add({ point: add(point, { x: 0, y: +0.5 }), dir: Dir.Left })
+        if (!shape.has(down)) {
+            edgepoint_to_dir.set(shiftTuple(point, 0, 0.5), 2)
         }
-        console.log(edgepoints)
-        console.log(left)
-        console.log(right)
-        console.log(up)
-        console.log(!shape.contains(down))
-        console.log(shape.contains(down))
-        console.log(down)
-        console.log(shape)
     })
     let path = ""
-    let start_edgepoint: EdgePoint | undefined
     let counter_outer = 0
-    while (!edgepoints.isEmpty() && counter_outer++ < 100) {
-        start_edgepoint = edgepoints.toArray()[0] // TODO: This is dumb
-        let edgepoint = Object.assign({}, start_edgepoint)
-        path += `M${edgepoint.point.x} ${edgepoint.point.y}`
+    let start_edgepoint: Edgepoint | undefined
+    while ((start_edgepoint = edgepoint_to_dir.keys().next()?.value) && counter_outer++ < 20) {
+        let edgepoint: Edgepoint = start_edgepoint
+        let dir: number = edgepoint_to_dir.get(edgepoint)
+
+        path += `M${x(edgepoint)} ${y(edgepoint)}`
         let counter_inner = 0
         do {
-            let center: Point | undefined
-            switch (edgepoint.dir) {
-                case Dir.Up:
-                    center = add(edgepoint.point, { x: 0, y: -0.5 })
-                    if (shape.contains(add(center, { x: -0.5, y: -0.5 }))) {
-                        edgepoint = { point: add(center, { x: -0.5, y: 0 }), dir: Dir.Left }
-                    } else if (shape.contains(add(center, { x: 0.5, y: -0.5 }))) {
-                        edgepoint = { point: add(center, { x: 0, y: -0.5 }), dir: Dir.Up }
-                    } else {
-                        edgepoint = { point: add(center, { x: 0.5, y: 0 }), dir: Dir.Right }
-                    }
-                    break
-                case Dir.Down:
-                    center = add(edgepoint.point, { x: 0, y: 0.5 })
-                    if (shape.contains(add(center, { x: 0.5, y: 0.5 }))) {
-                        edgepoint = { point: add(center, { x: 0.5, y: 0 }), dir: Dir.Right }
-                    } else if (shape.contains(add(center, { x: -0.5, y: 0.5 }))) {
-                        edgepoint = { point: add(center, { x: 0, y: 0.5 }), dir: Dir.Down }
-                    } else {
-                        edgepoint = { point: add(center, { x: -0.5, y: 0 }), dir: Dir.Left }
-                    }
-                    break
-                case Dir.Left:
-                    center = add(edgepoint.point, { x: -0.5, y: 0 })
-                    if (shape.contains(add(center, { x: -0.5, y: 0.5 }))) {
-                        edgepoint = { point: add(center, { x: 0, y: 0.5 }), dir: Dir.Down }
-                    } else if (shape.contains(add(center, { x: -0.5, y: -0.5 }))) {
-                        edgepoint = { point: add(center, { x: -0.5, y: 0 }), dir: Dir.Left }
-                    } else {
-                        edgepoint = { point: add(center, { x: 0, y: -0.5 }), dir: Dir.Up }
-                    }
-                    break
-                case Dir.Right:
-                    center = add(edgepoint.point, { x: 0.5, y: 0 })
-                    if (shape.contains(add(center, { x: 0.5, y: -0.5 }))) {
-                        edgepoint = { point: add(center, { x: 0, y: -0.5 }), dir: Dir.Up }
-                    } else if (shape.contains(add(center, { x: 0.5, y: 0.5 }))) {
-                        edgepoint = { point: add(center, { x: 0.5, y: 0 }), dir: Dir.Right }
-                    } else {
-                        edgepoint = { point: add(center, { x: 0, y: 0.5 }), dir: Dir.Down }
-                    }
+            const dirvec: Point = DIRS[dir]
+            const forward = scale(dirvec, 0.5)
+            const left = scale(DIRS[(dir + 1) % 4], 0.5)
+            const right = scale(DIRS[(dir + 3) % 4], 0.5)
+            const center = shift(edgepoint, forward)
+            if (shape.has(shift(center, shift(left, forward)))) {
+                edgepoint = shift(center, left)
+                dir = (dir + 1) % 4
+            } else if (shape.has(shift(center, shift(right, forward)))) {
+                edgepoint = shift(center, forward)
+            } else {
+                edgepoint = shift(center, right)
+                dir = (dir + 3) % 4
             }
-            path += `Q${edgepoint.point.x} ${edgepoint.point.y} ${center.x} ${center.y}`
-            edgepoints.remove(edgepoint)
-        } while ((edgepoint.point.x != start_edgepoint.point.x || edgepoint.point.y != start_edgepoint.point.y) && counter_inner++ < 100)
+
+            //path += `Q${x(center)} ${y(center)} ${x(edgepoint)} ${y(edgepoint)}`
+            path += `C${x(center)} ${y(center)} ${x(center)} ${y(center)} ${x(edgepoint)} ${y(edgepoint)}`
+            edgepoint_to_dir.delete(edgepoint)
+        } while (edgepoint != start_edgepoint && counter_inner++ < 20)
         path += "Z"
     }
     return path
 }
-
-const shape_0 = new Collections.Set<Point>()
-for (let p of [{ x: 1, y: 0 }, { x: 0, y: 1 }, { x: 1, y: 2 }, { x: 2, y: 1 }]) {
-    shape_0.add(Object.assign({}, p))
-    console.log(shape_0)
-}
-console.log(shape_to_path(shape_0))
 
 class Block {
     constructor(public shape: Shape, public offset: Offset) {
