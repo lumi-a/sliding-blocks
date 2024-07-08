@@ -16,8 +16,7 @@
   ],
   "license": "(MIT OR Apache-2.0)",
   "dependencies": {
-    "sliding-blocks": "file:../pkg",
-    "typescript-collections": "^1.3.3"
+    "sliding-blocks": "file:../pkg"
   },
   "devDependencies": {
     "copy-webpack-plugin": "^5.0.0",

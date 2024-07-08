@@ -1,16 +1,29 @@
 import { solve_puzzle } from "sliding-blocks"
-import * as Collections from 'typescript-collections';
 
-interface Point {
-    x: number,
-    y: number
+// All I want for Christmas is proper JS data structures
+type Point = number
+const COMPONENT_BITS = 16
+const COMPONENT_MASK = (1 << COMPONENT_BITS) - 1
+const COMPONENT_SIGN_BIT = 1 << (COMPONENT_BITS - 1)
+function p(x: number, y: number): Point {
+    // x,y ∈ ℤ * 1/8, please
+    const packedX = (Math.round(x * 8) & COMPONENT_MASK) >>> 0
+    const packedY = (Math.round(y * 8) & COMPONENT_MASK) >>> 0
+    return (packedX << COMPONENT_BITS) | packedY
 }
-
-function add(a: Point, b: Point): Point {
-    return { x: a.x + b.x, y: a.y + b.y }
+function x(v: Point) {
+    const x = (v >>> COMPONENT_BITS) & COMPONENT_MASK
+    return ((x & COMPONENT_SIGN_BIT) ? (x | ~COMPONENT_MASK) : x) / 8
 }
+function y(v: Point) {
+    const y = v & COMPONENT_MASK
+    return ((y & COMPONENT_SIGN_BIT) ? (y | ~COMPONENT_MASK) : y) / 8
+}
+const shiftTuple = (v: Point, a: number, b: number) => p(a + x(v), b + y(v))
+const shift = (v: Point, w: Point) => p(x(w) + x(v), y(w) + y(v))
+const scale = (v: Point, s: number) => p(x(v) * s, y(v) * s)
 
-type Shape = Collections.Set<Point>
+type Shape = Set<Point>
 type Offset = Point
 
 const PATH_CORNER_RADIUS = 0.1
