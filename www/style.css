@@ -1,0 +1,10 @@
+#svg {
+    /* TODO: Make this responsive. */
+    max-width: 100vw;
+    max-height: 100vh;
+}
+
+#svg>path {
+    stroke: black;
+    stroke-width: 0.025;
+}

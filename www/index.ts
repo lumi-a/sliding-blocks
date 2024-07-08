@@ -47,8 +47,8 @@ function get_extremes(coordinates_set: Shape): [Point, Point] {
     let max_x = Number.MIN_SAFE_INTEGER
     let max_y = Number.MIN_SAFE_INTEGER
     for (const point of coordinates_set) {
-        max_x = Math.min(max_x, x(point))
-        max_y = Math.min(max_y, y(point))
+        max_x = Math.max(max_x, x(point))
+        max_y = Math.max(max_y, y(point))
         min_x = Math.min(min_x, x(point))
         min_y = Math.min(min_y, y(point))
     }
@@ -81,14 +81,14 @@ function shape_to_path(shape: Shape): string {
         }
     })
     let path = ""
-    let counter_outer = 0
+    let outer_failsafe_counter = 0
     let start_edgepoint: Edgepoint | undefined
-    while ((start_edgepoint = edgepoint_to_dir.keys().next()?.value) && counter_outer++ < 20) {
+    while ((start_edgepoint = edgepoint_to_dir.keys().next()?.value) && outer_failsafe_counter++ < 1000) {
         let edgepoint: Edgepoint = start_edgepoint
         let dir: number = edgepoint_to_dir.get(edgepoint)
 
         path += `M${x(edgepoint)} ${y(edgepoint)}`
-        let counter_inner = 0
+        let inner_failsafe_counter = 0
         do {
             const dirvec: Point = DIRS[dir]
             const forward = scale(dirvec, 0.5)
@@ -108,15 +108,21 @@ function shape_to_path(shape: Shape): string {
             //path += `Q${x(center)} ${y(center)} ${x(edgepoint)} ${y(edgepoint)}`
             path += `C${x(center)} ${y(center)} ${x(center)} ${y(center)} ${x(edgepoint)} ${y(edgepoint)}`
             edgepoint_to_dir.delete(edgepoint)
-        } while (edgepoint != start_edgepoint && counter_inner++ < 20)
+        } while (edgepoint != start_edgepoint && inner_failsafe_counter++ < 1000)
         path += "Z"
     }
     return path
 }
 
+const BOUNDS_CHAR: string = '.'
+
 function char_to_color(char: string): string {
     let code = char.charCodeAt(0)
     // TODO: Better color palette
+    // TODO: Dark mode stuff?
+    if (char == BOUNDS_CHAR) {
+        return `#BBB`
+    }
     return `rgb(${code * 54979 % 255},${code * 70769 % 255},${code * 10113 % 255})`
 }
 
@@ -161,7 +167,6 @@ class Block {
     */
 }
 
-const BOUNDS_CHAR: string = '.'
 class Blockstate {
     public min: Point
     public max: Point
@@ -217,7 +222,7 @@ class Blockstate {
         const min = p(global_min_x, global_min_y)
 
         let bounds: Block = new Block(unshift_shape(bounds_coordinates, min), BOUNDS_CHAR)
-        let blocks: Array<Block> = Object.entries(char_to_blockcoordinates).map(([c, coordinates]) => new Block(coordinates, c))
+        let blocks: Array<Block> = Object.entries(char_to_blockcoordinates).map(([c, coordinates]) => new Block(unshift_shape(coordinates, min), c))
 
         return new Blockstate(bounds, blocks)
     }

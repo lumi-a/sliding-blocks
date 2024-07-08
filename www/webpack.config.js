@@ -20,7 +20,7 @@ module.exports = {
       }
     ]
   },
-  plugins: [new CopyWebpackPlugin(["index.html"])],
+  plugins: [new CopyWebpackPlugin(["index.html", "style.css", "favicon.ico"])],
   experiments: {
     asyncWebAssembly: true,
     syncWebAssembly: true,
