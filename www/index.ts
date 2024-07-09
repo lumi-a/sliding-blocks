@@ -230,6 +230,10 @@ class Block {
             }
         }
 
+        // TODO: stop-function
+        // TODO: Highlighting the block that's currently being dragged
+        // TODO: If new blockstate is different, increment move-counter, and do confetti on win
+
         interact(this.path).draggable({
             listeners: {
                 start: start,
@@ -237,13 +241,6 @@ class Block {
             }
         })
     }
-    /*
-    addDragging(blockstate, puzzle) {
-        // this.containerBlock.addEventListener('pointerdown', event => { startDrag(event, this, blockstate, puzzle) })
-        let hammer = new Hammer(this.containerBlock)
-        hammer.on('panstart', event => startDrag(event, this, blockstate, puzzle, hammer))
-    }
-    */
 }
 
 class Blockstate {
