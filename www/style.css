@@ -7,5 +7,5 @@
 #svg-puzzle>path {
     stroke: black;
     stroke-width: 0.025;
-    transition: transform 0.125s;
+    transition: transform 0.125s linear;
 }

@@ -200,14 +200,33 @@ class Block {
             start_cursor_position = unshift(this.client_to_point(event.client.x, event.client.y), this.offset)
         }
         const move = (event: any) => {
-            // TODO: Only move one position at a time.
             const old_offset = this.offset
             const new_offset_unrounded = unshift(this.client_to_point(event.client.x, event.client.y), start_cursor_position)
 
             const new_offset = p(Math.round(x(new_offset_unrounded)), Math.round(y(new_offset_unrounded)))
-            if (valid_offset(new_offset)) {
-                this.offset = new_offset
-                this.update_translation()
+            if (old_offset != new_offset && valid_offset(new_offset)) {
+                // Do BFS from old_offset to new_offset
+                // TODO: Perhaps do proper animations rather than CSS transitions
+                let queue = [old_offset]
+                let visited = new Set([old_offset])
+                let success = false
+                while (queue.length > 0) {
+                    let point: Point = queue.shift()
+                    if (point == new_offset) {
+                        success = true
+                        break
+                    }
+                    for (let neighbor of [shift(point, p(0, 1)), shift(point, p(0, -1)), shift(point, p(1, 0)), shift(point, p(-1, 0))]) {
+                        if (visited.has(neighbor) || !valid_offset(neighbor)) continue
+                        visited.add(neighbor)
+                        queue.push(neighbor)
+                    }
+                }
+                if (success) {
+                    this.offset = new_offset
+                    this.update_translation()
+                }
+
             }
         }
 
