@@ -1,4 +1,5 @@
 import { solve_puzzle } from "sliding-blocks"
+import interact from 'interactjs' // TODO: Only install the parts you need: https://interactjs.io/docs/installation#npm-streamlined
 
 // All I want for Christmas is proper JS data structures
 type Point = number
@@ -20,21 +21,19 @@ function y(v: Point) {
     return ((y & COMPONENT_SIGN_BIT) ? (y | ~COMPONENT_MASK) : y) / 8
 }
 const shift_tuple = (v: Point, a: number, b: number) => p(a + x(v), b + y(v))
-const shift = (v: Point, w: Point) => p(x(w) + x(v), y(w) + y(v))
+const shift = (v: Point, w: Point) => p(x(v) + x(w), y(v) + y(w))
+const unshift = (v: Point, w: Point) => shift(v, scale(w, -1))
 const scale = (v: Point, s: number) => p(x(v) * s, y(v) * s)
 const shift_shape = (shape: Shape, v: Point) => new Set([...shape].map(p => shift(p, v)))
-const unshift_shape = (shape: Shape, v: Point) => {
-    const w = scale(v, -1)
-    return new Set([...shape].map(p => shift(p, w)))
-}
+const unshift_shape = (shape: Shape, v: Point) => shift_shape(shape, scale(v, -1))
 
 type Shape = Set<Point>
 type Offset = Point
 
-function isSubset(a: Shape, b: Shape): boolean {
+function is_subset(a: Shape, b: Shape): boolean {
     return [...a].every(x => b.has(x))
 }
-function isDisjoint(a: Shape, b: Shape): boolean {
+function is_disjoint(a: Shape, b: Shape): boolean {
     return [...a].every(x => !b.has(x))
 }
 
@@ -126,13 +125,23 @@ function char_to_color(char: string): string {
     return `rgb(${code * 54979 % 255},${code * 70769 % 255},${code * 10113 % 255})`
 }
 
-const svg_elem = document.getElementById("svg")
+const SVG_NAMESPACE = "http://www.w3.org/2000/svg"
+const svg_puzzle_container = document.getElementById("svg-puzzle-container")
+const svg_puzzle: SVGSVGElement = document.createElementNS(SVG_NAMESPACE, "svg")
+svg_puzzle.id = "svg-puzzle"
+svg_puzzle.setAttribute("xmlns", SVG_NAMESPACE)
+svg_puzzle_container.appendChild(svg_puzzle)
+
 
 class Block {
     public shape: Shape
     public offset: Offset
     public char: string
     public path: SVGPathElement
+    public svg_elem: SVGSVGElement
+    private svg_sctm_inverse: SVGMatrix
+    private svg_point: SVGPoint
+
 
     constructor(coordinates: Shape, char: string) {
         let [min, max] = get_extremes(coordinates)
@@ -141,22 +150,73 @@ class Block {
         this.char = char
     }
 
-    initialise() {
+    client_to_point(clientX: number, clientY: number): Point {
+        this.svg_point.x = clientX
+        this.svg_point.y = clientY
+        const point = this.svg_point.matrixTransform(this.svg_sctm_inverse)
+        return p(point.x, point.y)
+    }
+
+    update_translation() {
+        this.path.style.transform = `translate(${x(this.offset)}px, ${y(this.offset)}px)`;
+    }
+    get_coordinates(): Shape {
+        return shift_shape(this.shape, this.offset)
+    }
+    initialise_elem(svg_elem: SVGSVGElement) {
         let path = document.createElementNS("http://www.w3.org/2000/svg", "path")
         path.setAttribute("d", shape_to_path(this.shape))
         path.setAttribute("fill", char_to_color(this.char))
         // TODO: Stroke, shadow, letter-pattern-fill
         this.path = path
 
+        this.svg_elem = svg_elem
+        this.svg_sctm_inverse = svg_elem.getScreenCTM().inverse()
+        this.svg_point = svg_elem.createSVGPoint()
+
         svg_elem.appendChild(this.path)
 
-        this.updateTranslation()
+        this.update_translation()
     }
-    updateTranslation() {
-        this.path.setAttribute("transform", `translate(${x(this.offset)}, ${y(this.offset)})`)
-    }
-    getCoordinates(): Shape {
-        return shift_shape(this.shape, this.offset)
+
+    make_interactive(blockstate: Blockstate, blockarr_ix: number) {
+        if (!this.path || !this.svg_elem) {
+            return
+        }
+        const valid_offset = (offset: Point) => {
+            const block = shift_shape(this.shape, offset)
+            // TODO: Maybe don't re-calculate bounds.get_coordinates every time?
+            // Also see is_valid function on blockstate class
+            if (!is_subset(block, blockstate.bounds.get_coordinates())) return false
+            for (let j = 0; j < blockstate.blocks.length; j++) {
+                if (j == blockarr_ix) continue
+                const other_block = blockstate.blocks[j].get_coordinates()
+                if (!is_disjoint(block, other_block)) return false
+            }
+            return true
+        }
+        let start_cursor_position: Point
+        const start = (event: any) => {
+            start_cursor_position = unshift(this.client_to_point(event.client.x, event.client.y), this.offset)
+        }
+        const move = (event: any) => {
+            // TODO: Only move one position at a time.
+            const old_offset = this.offset
+            const new_offset_unrounded = unshift(this.client_to_point(event.client.x, event.client.y), start_cursor_position)
+
+            const new_offset = p(Math.round(x(new_offset_unrounded)), Math.round(y(new_offset_unrounded)))
+            if (valid_offset(new_offset)) {
+                this.offset = new_offset
+                this.update_translation()
+            }
+        }
+
+        interact(this.path).draggable({
+            listeners: {
+                start: start,
+                move: move,
+            }
+        })
     }
     /*
     addDragging(blockstate, puzzle) {
@@ -172,6 +232,7 @@ class Blockstate {
     public max: Point
     public bounds: Block
     public blocks: Array<Block>
+    public svg_elem: SVGSVGElement
 
     constructor(bounds: Block, blocks: Array<Block>) {
         [this.min, this.max] = get_extremes(bounds.shape)
@@ -179,21 +240,21 @@ class Blockstate {
         this.blocks = blocks
     }
 
-    isValid() {
-        const bounds = this.bounds.getCoordinates()
-        const blocks = this.blocks.map(b => b.getCoordinates())
+    is_valid() {
+        const bounds = this.bounds.get_coordinates()
+        const blocks = this.blocks.map(b => b.get_coordinates())
         for (let block_ix = 0; block_ix < blocks.length; block_ix++) {
             const block = blocks[block_ix]
-            if (!isSubset(block, bounds)) return false
+            if (!is_subset(block, bounds)) return false
             for (let j = block_ix + 1; j < blocks.length; j++) {
                 const other_block = blocks[j]
-                if (!isDisjoint(block, other_block)) return false
+                if (!is_disjoint(block, other_block)) return false
             }
         }
         return true
     }
 
-    static blockstateFromString(str: string) {
+    static blockstate_from_string(str: string) {
         const lines = str.split(/\r?\n/g)
 
         let global_min_x = Number.MAX_SAFE_INTEGER;
@@ -227,18 +288,26 @@ class Blockstate {
         return new Blockstate(bounds, blocks)
     }
 
-    initialise() {
+    initialise(svg_elem: SVGSVGElement) {
         svg_elem.innerHTML = ""
         const width = x(this.max) - x(this.min) + 1
         const height = y(this.max) - y(this.min) + 1
         svg_elem.setAttribute("viewBox", `${x(this.min) - 1} ${y(this.min) - 1} ${width + 1} ${height + 1}`)
+        this.svg_elem = svg_elem
 
-        this.bounds.initialise()
-        for (let block of this.blocks) block.initialise()
+        this.bounds.initialise_elem(svg_elem)
+        for (let block of this.blocks) block.initialise_elem(svg_elem)
+    }
+
+    make_interactive() {
+        for (let blockarr_ix = 0; blockarr_ix < this.blocks.length; blockarr_ix++) {
+            const block = this.blocks[blockarr_ix]
+            block.make_interactive(this, blockarr_ix)
+        }
     }
 }
 
-let bs = Blockstate.blockstateFromString(`
+let bs = Blockstate.blockstate_from_string(`
       tt
       tt
     ......
@@ -248,7 +317,8 @@ let bs = Blockstate.blockstateFromString(`
       bb
       ..
 `)
-bs.initialise()
+bs.initialise(svg_puzzle)
+bs.make_interactive()
 
 let solution = solve_puzzle(`
     a.b

@@ -16,6 +16,7 @@
   ],
   "license": "(MIT OR Apache-2.0)",
   "dependencies": {
+    "interactjs": "^1.10.27",
     "sliding-blocks": "file:../pkg"
   },
   "devDependencies": {
