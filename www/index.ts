@@ -210,6 +210,7 @@ class Block {
             if (old_offset != new_offset && valid_offset(new_offset)) {
                 // Do BFS from old_offset to new_offset
                 // TODO: Perhaps do proper animations rather than CSS transitions
+                // TODO: Rather than do BFS every move-call, do bfs once for valid offsets in start-call and check if this is contained in valid offsets
                 let queue = [old_offset]
                 let visited = new Set([old_offset])
                 let success = false
@@ -236,7 +237,6 @@ class Block {
             // Is new blockstate different from before?
             if (start_offset !== this.offset) {
                 puzzle.move_counter += 1
-                console.log(`move ${puzzle.move_counter}`)
                 if (puzzle.won()) {
                     // TODO: Confetti
                     console.log("won!")
@@ -317,6 +317,31 @@ class Blockstate {
         return new Blockstate(bounds, blocks)
     }
 
+    to_string() {
+        // TODO: How many of these methods should I import from Rust?
+        let str = ""
+        const block_coordinates: Array<[Block, Shape]> = this.blocks.map(b => [b, b.get_coordinates()])
+        const bounds = this.bounds.get_coordinates()
+        for (let Y = y(this.min); Y <= y(this.max); Y++) {
+            for (let X = x(this.min); X <= x(this.max); X++) {
+                let found = false
+                for (let [b, coordinates] of block_coordinates) {
+                    if (coordinates.has(p(X, Y))) {
+                        str += b.char
+                        found = true
+                        break
+                    }
+                }
+                if (!found) {
+                    if (bounds.has(p(X, Y))) str += BOUNDS_CHAR
+                    else str += " "
+                }
+            }
+            str += "\n"
+        }
+        return str
+    }
+
     initialise(svg_elem: SVGSVGElement) {
         svg_elem.innerHTML = ""
         const width = x(this.max) - x(this.min) + 1
@@ -345,13 +370,12 @@ class Puzzle {
     public goal_offsets: Array<Offset | null> // TODO: This is awful
 
     constructor(start_string: string, goal_string: string, min_moves: number | null = null) {
-        this.start_string = start_string
-        this.goal_string = goal_string
         this.min_moves = min_moves
         this.move_counter = 0
 
         // TODO: Lots of error-checking on shapes that's also done in Rust
-        this.blockstate = Blockstate.blockstate_from_string(start_string)
+        const start_blockstate = Blockstate.blockstate_from_string(start_string)
+        this.blockstate = start_blockstate
         const goal_blockstate = Blockstate.blockstate_from_string(goal_string)
         this.goal_offsets = this.blockstate.blocks.map(block => {
             for (let goal_block of goal_blockstate.blocks) {
@@ -359,11 +383,12 @@ class Puzzle {
             }
             return null
         })
+        this.start_string = start_blockstate.to_string()
+        this.goal_string = goal_blockstate.to_string()
     }
 
     won() {
         const goal_offsets = this.goal_offsets
-        console.log(goal_offsets, this.blockstate.blocks.map(b => b.offset))
         return this.blockstate.blocks.every((b, ix) => goal_offsets[ix] === null || b.offset === goal_offsets[ix])
     }
 
@@ -377,11 +402,25 @@ class Puzzle {
 
 const change_puzzle_dialog = document.getElementById("change-puzzle-dialog") as HTMLDialogElement
 const change_puzzle_btn = document.getElementById("change-puzzle-btn") as HTMLButtonElement
+const puzzle_textarea_start = document.getElementById("puzzle-textarea-start") as HTMLTextAreaElement
+const puzzle_textarea_goal = document.getElementById("puzzle-textarea-start") as HTMLTextAreaElement
+const puzzle_submit_btn = document.getElementById("puzzle-submit-btn") as HTMLButtonElement
 change_puzzle_btn.addEventListener("click", () => {
     change_puzzle_dialog.showModal()
+    puzzle_textarea_goal.value = current_puzzle.goal_string
+    puzzle_textarea_start.value = current_puzzle.start_string
 })
 
-let puzzle = new Puzzle(`
+puzzle_submit_btn.addEventListener("click", e => {
+    e.preventDefault()
+    const start_string = puzzle_textarea_start.value
+    const goal_string = puzzle_textarea_goal.value
+    change_puzzle_dialog.close()
+    current_puzzle = new Puzzle(start_string, goal_string)
+    current_puzzle.initialise(svg_puzzle)
+})
+
+let current_puzzle: Puzzle = new Puzzle(`
       tt
       tt
     ......
@@ -400,4 +439,4 @@ let puzzle = new Puzzle(`
       tt
       tt
 `)
-puzzle.initialise(svg_puzzle)
+current_puzzle.initialise(svg_puzzle)

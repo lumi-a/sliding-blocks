@@ -13,3 +13,7 @@
     stroke-width: 0.025;
     transition: transform 0.125s linear;
 }
+
+.puzzle-string {
+    font-family: monospace;
+}

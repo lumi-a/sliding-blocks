@@ -25,13 +25,15 @@
       </div>
       <div>
         <!-- TODO: Improve styling -->
-        <label for="puzzle-input-start">Start:</label>
+        <label for="puzzle-textarea-start">Start:</label>
+        <textarea id="puzzle-textarea-start" rows="10" cols="10" name="puzzle-textarea-start" spellcheck="false"
+          class="puzzle-string"></textarea>
 
-        <textarea id="puzzle-input-start" rows="8" cols="8" name="puzzle-input-start" spellcheck="false"></textarea>
+        <label for="puzzle-textarea-goal">Goal:</label>
+        <textarea id="puzzle-textarea-goal" rows="10" cols="10" name="puzzle-textarea-goal" spellcheck="false"
+          class="puzzle-string"></textarea>
 
-        <label for="puzzle-input-goal">Goal:</label>
-
-        <textarea id="puzzle-input-goal" rows="8" cols="8" name="puzzle-input-goal" spellcheck="false"></textarea>
+        <button id="puzzle-submit-btn">✅</button>
       </div>
     </form>
   </dialog>
