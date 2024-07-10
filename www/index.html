@@ -11,7 +11,33 @@
 
 <body>
   <noscript>This page contains webassembly and javascript content, please enable javascript in your browser.</noscript>
+
+  <header>
+    <button id="change-puzzle-btn">Change Puzzle</button>
+    <p id="move-counter">0</p>
+  </header>
+  <dialog id="change-puzzle-dialog">
+    <form>
+      <div>
+        <select id="puzzle-selection">
+
+        </select>
+      </div>
+      <div>
+        <!-- TODO: Improve styling -->
+        <label for="puzzle-input-start">Start:</label>
+
+        <textarea id="puzzle-input-start" rows="8" cols="8" name="puzzle-input-start" spellcheck="false"></textarea>
+
+        <label for="puzzle-input-goal">Goal:</label>
+
+        <textarea id="puzzle-input-goal" rows="8" cols="8" name="puzzle-input-goal" spellcheck="false"></textarea>
+      </div>
+    </form>
+  </dialog>
+
   <div id="svg-puzzle-container"></div>
+
   <script src="./bootstrap.js"></script>
 </body>
 
