@@ -179,10 +179,11 @@ class Block {
         this.update_translation()
     }
 
-    make_interactive(blockstate: Blockstate, blockarr_ix: number) {
+    make_interactive(puzzle: Puzzle, blockarr_ix: number) {
         if (!this.path || !this.svg_elem) {
             return
         }
+        const blockstate = puzzle.blockstate
         const valid_offset = (offset: Point) => {
             const block = shift_shape(this.shape, offset)
             // TODO: Maybe don't re-calculate bounds.get_coordinates every time?
@@ -196,8 +197,10 @@ class Block {
             return true
         }
         let start_cursor_position: Point
+        let start_offset = this.offset
         const start = (event: any) => {
-            start_cursor_position = unshift(this.client_to_point(event.client.x, event.client.y), this.offset)
+            start_offset = this.offset
+            start_cursor_position = unshift(this.client_to_point(event.client.x, event.client.y), start_offset)
         }
         const move = (event: any) => {
             const old_offset = this.offset
@@ -229,15 +232,25 @@ class Block {
 
             }
         }
+        const end = (event: any) => {
+            // Is new blockstate different from before?
+            if (start_offset !== this.offset) {
+                puzzle.move_counter += 1
+                console.log(`move ${puzzle.move_counter}`)
+                if (puzzle.won()) {
+                    // TODO: Confetti
+                    console.log("won!")
+                }
+            }
+        }
 
-        // TODO: stop-function
         // TODO: Highlighting the block that's currently being dragged
-        // TODO: If new blockstate is different, increment move-counter, and do confetti on win
 
         interact(this.path).draggable({
             listeners: {
                 start: start,
                 move: move,
+                end: end
             }
         })
     }
@@ -315,34 +328,76 @@ class Blockstate {
         for (let block of this.blocks) block.initialise_elem(svg_elem)
     }
 
-    make_interactive() {
+    make_interactive(puzzle: Puzzle) {
         for (let blockarr_ix = 0; blockarr_ix < this.blocks.length; blockarr_ix++) {
             const block = this.blocks[blockarr_ix]
-            block.make_interactive(this, blockarr_ix)
+            block.make_interactive(puzzle, blockarr_ix)
         }
     }
 }
 
-let bs = Blockstate.blockstate_from_string(`
+class Puzzle {
+    public start_string: string
+    public goal_string: string
+    public min_moves: number | null
+    public move_counter: number // TODO: Should this be a global variable instead?
+    public blockstate: Blockstate
+    public goal_offsets: Array<Offset | null> // TODO: This is awful
+
+    constructor(start_string: string, goal_string: string, min_moves: number | null = null) {
+        this.start_string = start_string
+        this.goal_string = goal_string
+        this.min_moves = min_moves
+        this.move_counter = 0
+
+        // TODO: Lots of error-checking on shapes that's also done in Rust
+        this.blockstate = Blockstate.blockstate_from_string(start_string)
+        const goal_blockstate = Blockstate.blockstate_from_string(goal_string)
+        this.goal_offsets = this.blockstate.blocks.map(block => {
+            for (let goal_block of goal_blockstate.blocks) {
+                if (goal_block.char === block.char) return goal_block.offset
+            }
+            return null
+        })
+    }
+
+    won() {
+        const goal_offsets = this.goal_offsets
+        console.log(goal_offsets, this.blockstate.blocks.map(b => b.offset))
+        return this.blockstate.blocks.every((b, ix) => goal_offsets[ix] === null || b.offset === goal_offsets[ix])
+    }
+
+    initialise(svg_elem: SVGSVGElement) {
+        this.blockstate = Blockstate.blockstate_from_string(this.start_string)
+        this.blockstate.initialise(svg_elem)
+        this.blockstate.make_interactive(this)
+        this.move_counter = 0
+    }
+}
+
+const change_puzzle_dialog = document.getElementById("change-puzzle-dialog") as HTMLDialogElement
+const change_puzzle_btn = document.getElementById("change-puzzle-btn") as HTMLButtonElement
+change_puzzle_btn.addEventListener("click", () => {
+    change_puzzle_dialog.showModal()
+})
+
+let puzzle = new Puzzle(`
       tt
       tt
     ......
     .ppoo.
      ypog
-     yygg
-      bb
+     ....
       ..
-`)
-bs.initialise(svg_puzzle)
-bs.make_interactive()
-
-let solution = solve_puzzle(`
-    a.b
-     .
+      ..
 `, `
-    b.a
-     .
+      ..
+      ..
+    ......
+    ......
+     ....
+     ....
+      tt
+      tt
 `)
-for (let step of solution) {
-    console.log(step)
-}
+puzzle.initialise(svg_puzzle)
