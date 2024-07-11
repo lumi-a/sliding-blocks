@@ -14,28 +14,26 @@
 
   <header>
     <button id="change-puzzle-btn">Change Puzzle</button>
-    <p id="move-counter">0</p>
+    <span id="move-counter">0</span>
   </header>
   <dialog id="change-puzzle-dialog">
-    <form>
-      <div>
-        <select id="puzzle-selection">
+    <div>
+      <select id="puzzle-selection">
 
-        </select>
-      </div>
-      <div>
-        <!-- TODO: Improve styling -->
-        <label for="puzzle-textarea-start">Start:</label>
-        <textarea id="puzzle-textarea-start" rows="10" cols="10" name="puzzle-textarea-start" spellcheck="false"
-          class="puzzle-string"></textarea>
+      </select>
+    </div>
+    <div>
+      <!-- TODO: Improve styling -->
+      <label for="puzzle-textarea-start">Start:</label>
+      <textarea id="puzzle-textarea-start" rows="10" cols="10" name="puzzle-textarea-start" spellcheck="false"
+        class="puzzle-string"></textarea>
 
-        <label for="puzzle-textarea-goal">Goal:</label>
-        <textarea id="puzzle-textarea-goal" rows="10" cols="10" name="puzzle-textarea-goal" spellcheck="false"
-          class="puzzle-string"></textarea>
+      <label for="puzzle-textarea-goal">Goal:</label>
+      <textarea id="puzzle-textarea-goal" rows="10" cols="10" name="puzzle-textarea-goal" spellcheck="false"
+        class="puzzle-string"></textarea>
 
-        <button id="puzzle-submit-btn">✅</button>
-      </div>
-    </form>
+      <button id="puzzle-submit-btn">✅</button>
+    </div>
   </dialog>
 
   <div id="svg-puzzle-container"></div>

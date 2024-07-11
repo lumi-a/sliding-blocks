@@ -1,5 +1,7 @@
 import { solve_puzzle } from "sliding-blocks"
 import interact from 'interactjs' // TODO: Only install the parts you need: https://interactjs.io/docs/installation#npm-streamlined
+import JSConfetti from 'js-confetti'
+const jsConfetti = new JSConfetti()
 
 // All I want for Christmas is proper JS data structures
 type Point = number
@@ -237,9 +239,11 @@ class Block {
             // Is new blockstate different from before?
             if (start_offset !== this.offset) {
                 puzzle.move_counter += 1
+                move_counter_elem.textContent = puzzle.move_counter.toString()
                 if (puzzle.won()) {
-                    // TODO: Confetti
-                    console.log("won!")
+                    if (puzzle.min_moves !== null && puzzle.move_counter < puzzle.min_moves) jsConfetti.addConfetti({ emojis: ["🐞"] })
+                    else if (puzzle.min_moves !== null && puzzle.move_counter === puzzle.min_moves) jsConfetti.addConfetti({ emojis: ["🏆"] })
+                    else jsConfetti.addConfetti()
                 }
             }
         }
@@ -397,18 +401,20 @@ class Puzzle {
         this.blockstate.initialise(svg_elem)
         this.blockstate.make_interactive(this)
         this.move_counter = 0
+        move_counter_elem.textContent = "0"
     }
 }
 
 const change_puzzle_dialog = document.getElementById("change-puzzle-dialog") as HTMLDialogElement
 const change_puzzle_btn = document.getElementById("change-puzzle-btn") as HTMLButtonElement
 const puzzle_textarea_start = document.getElementById("puzzle-textarea-start") as HTMLTextAreaElement
-const puzzle_textarea_goal = document.getElementById("puzzle-textarea-start") as HTMLTextAreaElement
+const puzzle_textarea_goal = document.getElementById("puzzle-textarea-goal") as HTMLTextAreaElement
 const puzzle_submit_btn = document.getElementById("puzzle-submit-btn") as HTMLButtonElement
+const move_counter_elem = document.getElementById("move-counter") as HTMLSpanElement
 change_puzzle_btn.addEventListener("click", () => {
-    change_puzzle_dialog.showModal()
     puzzle_textarea_goal.value = current_puzzle.goal_string
     puzzle_textarea_start.value = current_puzzle.start_string
+    change_puzzle_dialog.showModal()
 })
 
 puzzle_submit_btn.addEventListener("click", e => {
@@ -438,5 +444,5 @@ let current_puzzle: Puzzle = new Puzzle(`
      ....
       tt
       tt
-`)
+`, 5)
 current_puzzle.initialise(svg_puzzle)

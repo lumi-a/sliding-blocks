@@ -6,11 +6,11 @@ module.exports = {
   output: {
     path: path.resolve(__dirname, "dist"),
     filename: "bootstrap.js",
+    clean: true
   },
   resolve: {
     extensions: [".ts", ".js", ".wasm"],
   },
-  mode: "development",
   module: {
     rules: [
       {
@@ -24,11 +24,5 @@ module.exports = {
   experiments: {
     asyncWebAssembly: true,
     syncWebAssembly: true,
-  },
-  devServer: {
-    static: {
-      directory: path.join(__dirname, "dist"),
-    },
-    compress: true,
   },
 };

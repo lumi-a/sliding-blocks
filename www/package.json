@@ -1,8 +1,8 @@
 {
   "main": "index.js",
   "scripts": {
-    "build": "webpack --config webpack.config.js",
-    "start": "webpack serve"
+    "build": "webpack --config webpack.prod.js",
+    "start": "webpack serve --open --config webpack.dev.js"
   },
   "repository": {
     "type": "git",
@@ -17,6 +17,7 @@
   "license": "(MIT OR Apache-2.0)",
   "dependencies": {
     "interactjs": "^1.10.27",
+    "js-confetti": "^0.12.0",
     "sliding-blocks": "file:../pkg"
   },
   "devDependencies": {
