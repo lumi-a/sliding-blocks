@@ -1,7 +1,9 @@
-import { solve_puzzle } from "sliding-blocks"
+import { solve_puzzle, get_all_js_examples } from "sliding-blocks"
 import interact from 'interactjs' // TODO: Only install the parts you need: https://interactjs.io/docs/installation#npm-streamlined
 import JSConfetti from 'js-confetti'
 const jsConfetti = new JSConfetti()
+
+// TODO: Indicate goal
 
 // All I want for Christmas is proper JS data structures
 type Point = number
@@ -213,6 +215,7 @@ class Block {
                 // Do BFS from old_offset to new_offset
                 // TODO: Perhaps do proper animations rather than CSS transitions
                 // TODO: Rather than do BFS every move-call, do bfs once for valid offsets in start-call and check if this is contained in valid offsets
+                // TODO: Better yet, do Floyd-Warshall and then "guess" the position the user wanted to move the block to by using the closest legal position (there always exists one because the initial position is legal)
                 let queue = [old_offset]
                 let visited = new Set([old_offset])
                 let success = false
@@ -424,6 +427,22 @@ puzzle_submit_btn.addEventListener("click", e => {
     change_puzzle_dialog.close()
     current_puzzle = new Puzzle(start_string, goal_string)
     current_puzzle.initialise(svg_puzzle)
+})
+
+const puzzle_selection = document.getElementById("puzzle-selection") as HTMLSelectElement
+const predefined_puzzles = get_all_js_examples()
+for (let js_puzzle of predefined_puzzles) {
+    const option = document.createElement("option")
+    option.textContent = js_puzzle.name
+    option.value = js_puzzle.name
+    puzzle_selection.appendChild(option)
+}
+puzzle_selection.addEventListener("change", () => {
+    // TODO: Use indices as names instead
+    const name = puzzle_selection.value
+    const js_puzzle = predefined_puzzles.find(js_puzzle => js_puzzle.name === name)!
+    puzzle_textarea_start.value = js_puzzle.start
+    puzzle_textarea_goal.value = js_puzzle.goal
 })
 
 let current_puzzle: Puzzle = new Puzzle(`

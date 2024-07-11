@@ -1,8 +1,40 @@
+use wasm_bindgen::prelude::*;
+
+// TODO: Perhaps conflate JsPuzzle and Puzzle by using Cow
+
+#[wasm_bindgen(getter_with_clone)]
+#[derive(Debug, Clone)]
+pub struct JsPuzzle {
+    pub name: String,
+    pub start: String,
+    pub goal: String,
+    pub min_moves: usize,
+}
+
+#[wasm_bindgen]
+pub fn get_all_js_examples() -> Vec<JsPuzzle> {
+    ALL_EXAMPLES
+        .iter()
+        .map(|puzzle| puzzle.clone().into())
+        .collect()
+}
+
+#[derive(Debug, Clone)]
 pub struct Puzzle {
     pub name: &'static str,
     pub start: &'static str,
     pub goal: &'static str,
-    pub moves: usize,
+    pub min_moves: usize,
+}
+impl std::convert::Into<JsPuzzle> for Puzzle {
+    fn into(self) -> JsPuzzle {
+        JsPuzzle {
+            name: self.name.to_string(),
+            start: self.start.to_string(),
+            goal: self.goal.to_string(),
+            min_moves: self.min_moves,
+        }
+    }
 }
 
 pub const ALL_EXAMPLES: [Puzzle; 6] = [
@@ -32,7 +64,7 @@ pub const TEN_STEP_SOLUTION: Puzzle = Puzzle {
      ... 
      A 
     "#,
-    moves: 10,
+    min_moves: 10,
 };
 
 pub const FOUR_BALLS: Puzzle = Puzzle {
@@ -53,7 +85,7 @@ pub const FOUR_BALLS: Puzzle = Puzzle {
      ....B
      A
     "#,
-    moves: 28,
+    min_moves: 28,
 };
 
 pub const THE_ELEVATOR_SWITCH: Puzzle = Puzzle {
@@ -80,7 +112,7 @@ pub const THE_ELEVATOR_SWITCH: Puzzle = Puzzle {
        AA
        AA
     "#,
-    moves: 12,
+    min_moves: 12,
 };
 
 pub const GARBAGE_DISPOSAL: Puzzle = Puzzle {
@@ -105,7 +137,7 @@ pub const GARBAGE_DISPOSAL: Puzzle = Puzzle {
       tt
       tt
     "#,
-    moves: 31,
+    min_moves: 31,
 };
 
 pub const THE_DIABOLICAL_BOX: Puzzle = Puzzle {
@@ -132,7 +164,7 @@ pub const THE_DIABOLICAL_BOX: Puzzle = Puzzle {
       ##    
       ##
     "#,
-    moves: 78,
+    min_moves: 78,
 };
 
 pub const ROYAL_ESCAPE: Puzzle = Puzzle {
@@ -149,5 +181,5 @@ pub const ROYAL_ESCAPE: Puzzle = Puzzle {
     ...##
     .....
     "#,
-    moves: 81,
+    min_moves: 81,
 };
