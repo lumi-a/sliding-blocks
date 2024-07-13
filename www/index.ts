@@ -10,19 +10,20 @@ type Point = number
 const COMPONENT_BITS = 16
 const COMPONENT_MASK = (1 << COMPONENT_BITS) - 1
 const COMPONENT_SIGN_BIT = 1 << (COMPONENT_BITS - 1)
+const COMPONENT_PRECISION = 2
 function p(x: number, y: number): Point {
-    // x,y ∈ ℤ * 1/8, please
-    const packedX = (Math.round(x * 8) & COMPONENT_MASK) >>> 0
-    const packedY = (Math.round(y * 8) & COMPONENT_MASK) >>> 0
+    // x,y ∈ ℤ * 1/COMPONENT_PRECISION, please
+    const packedX = (Math.round(x * COMPONENT_PRECISION) & COMPONENT_MASK) >>> 0
+    const packedY = (Math.round(y * COMPONENT_PRECISION) & COMPONENT_MASK) >>> 0
     return (packedX << COMPONENT_BITS) | packedY
 }
 function x(v: Point) {
     const x = (v >>> COMPONENT_BITS) & COMPONENT_MASK
-    return ((x & COMPONENT_SIGN_BIT) ? (x | ~COMPONENT_MASK) : x) / 8
+    return ((x & COMPONENT_SIGN_BIT) ? (x | ~COMPONENT_MASK) : x) / COMPONENT_PRECISION
 }
 function y(v: Point) {
     const y = v & COMPONENT_MASK
-    return ((y & COMPONENT_SIGN_BIT) ? (y | ~COMPONENT_MASK) : y) / 8
+    return ((y & COMPONENT_SIGN_BIT) ? (y | ~COMPONENT_MASK) : y) / COMPONENT_PRECISION
 }
 const shift_tuple = (v: Point, a: number, b: number) => p(a + x(v), b + y(v))
 const shift = (v: Point, w: Point) => p(x(v) + x(w), y(v) + y(w))
@@ -30,6 +31,7 @@ const unshift = (v: Point, w: Point) => shift(v, scale(w, -1))
 const scale = (v: Point, s: number) => p(x(v) * s, y(v) * s)
 const shift_shape = (shape: Shape, v: Point) => new Set([...shape].map(p => shift(p, v)))
 const unshift_shape = (shape: Shape, v: Point) => shift_shape(shape, scale(v, -1))
+const dot = (v: Point, w: Point) => x(v) * x(w) + y(v) * y(w)
 
 type Shape = Set<Point>
 type Offset = Point
@@ -84,17 +86,17 @@ function shape_to_path(shape: Shape): string {
         }
     })
     let path = ""
-    let outer_failsafe_counter = 0
+    let failsafe_counter = 0
     let start_edgepoint: Edgepoint | undefined
-    while ((start_edgepoint = edgepoint_to_dir.keys().next()?.value) && outer_failsafe_counter++ < 1000) {
+    while ((start_edgepoint = edgepoint_to_dir.keys().next()?.value) && failsafe_counter++ < 10000) {
         let edgepoint: Edgepoint = start_edgepoint
         let dir: number = edgepoint_to_dir.get(edgepoint)
 
         path += `M${x(edgepoint)} ${y(edgepoint)}`
-        let inner_failsafe_counter = 0
         do {
             const dirvec: Point = DIRS[dir]
             const forward = scale(dirvec, 0.5)
+            const backward = scale(dirvec, -0.5)
             const left = scale(DIRS[(dir + 1) % 4], 0.5)
             const right = scale(DIRS[(dir + 3) % 4], 0.5)
             const center = shift(edgepoint, forward)
@@ -111,7 +113,7 @@ function shape_to_path(shape: Shape): string {
             //path += `Q${x(center)} ${y(center)} ${x(edgepoint)} ${y(edgepoint)}`
             path += `C${x(center)} ${y(center)} ${x(center)} ${y(center)} ${x(edgepoint)} ${y(edgepoint)}`
             edgepoint_to_dir.delete(edgepoint)
-        } while (edgepoint != start_edgepoint && inner_failsafe_counter++ < 1000)
+        } while (edgepoint != start_edgepoint && failsafe_counter++ < 10000)
         path += "Z"
     }
     return path
@@ -171,8 +173,8 @@ class Block {
     }
     initialise_elem(svg_elem: SVGSVGElement) {
         let path = document.createElementNS(SVG_NAMESPACE, "path")
-        // TODO: Stroke, shadow, letter-pattern-fill
         path.setAttribute("d", shape_to_path(this.shape))
+        path.setAttribute("fill-rule", "evenodd")
 
         // Fill-Pattern:
         if (this.char !== BOUNDS_CHAR) {
@@ -249,6 +251,7 @@ class Block {
         const start = (event: any) => {
             start_offset = this.offset
             start_cursor_position = unshift(this.client_to_point(event.client.x, event.client.y), start_offset)
+            this.path.classList.add("dragging")
         }
         const move = (event: any) => {
             const old_offset = this.offset
@@ -293,9 +296,8 @@ class Block {
                     else jsConfetti.addConfetti()
                 }
             }
+            this.path.classList.remove("dragging")
         }
-
-        // TODO: Highlighting the block that's currently being dragged
 
         interact(this.path).draggable({
             listeners: {
