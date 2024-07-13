@@ -11,7 +11,7 @@ type Point = number
 const COMPONENT_BITS = 16
 const COMPONENT_MASK = (1 << COMPONENT_BITS) - 1
 const COMPONENT_SIGN_BIT = 1 << (COMPONENT_BITS - 1)
-const COMPONENT_PRECISION = 16
+const COMPONENT_PRECISION = 32
 function p(x: number, y: number): Point {
     // x,y ∈ ℤ * 1/COMPONENT_PRECISION, please
     const packedX = (Math.round(x * COMPONENT_PRECISION) & COMPONENT_MASK) >>> 0
@@ -217,7 +217,7 @@ class Block {
                     const X = (52.092819851131311425 * code + 13.087032255978894794 * i) % 1 + x(p)
                     const Y = (28.640673508054986905 * code + 94.824207530838495049 * i) % 1 + y(p)
                     const d = (14.336965871263130613 * code + 40.125163576904165817 * i) % 360
-                    const a = (72.313644289540589845 * code + 61.413884855320691933 * i) % 0.5
+                    const a = (72.313644289540589845 * code + 61.413884855320691933 * i) % 0.25
                     const f = (75.427959404814958242 * code + 85.346753489292519779 * i) % 0.4 + 0.2
                     letter.setAttribute("x", X.toString())
                     letter.setAttribute("y", Y.toString())
@@ -412,7 +412,7 @@ class Blockstate {
         return str
     }
 
-    initialise(svg_elem: SVGSVGElement) {
+    initialise(svg_elem: SVGSVGElement, goal_offsets: Array<Offset | null>) {
         svg_elem.innerHTML = ""
         const width = x(this.max) - x(this.min) + 1
         const height = y(this.max) - y(this.min) + 1
@@ -420,6 +420,17 @@ class Blockstate {
         this.svg_elem = svg_elem
 
         this.bounds.initialise_elem(svg_elem)
+        for (let block_ix = 0; block_ix < this.blocks.length; block_ix++) {
+            if (goal_offsets[block_ix] !== null) {
+                const block = this.blocks[block_ix]
+                const shadow_elem = block.construct_elem_path(0)
+                const shadow_offset = goal_offsets[block_ix]
+
+                shadow_elem.classList.add("shadowGoal")
+                shadow_elem.setAttribute("transform", `translate(${x(shadow_offset)}, ${y(shadow_offset)})`)
+                svg_elem.appendChild(shadow_elem)
+            }
+        }
         for (let block of this.blocks) block.initialise_elem(svg_elem)
     }
 
@@ -464,7 +475,7 @@ class Puzzle {
 
     initialise(svg_elem: SVGSVGElement) {
         this.blockstate = Blockstate.blockstate_from_string(this.start_string)
-        this.blockstate.initialise(svg_elem)
+        this.blockstate.initialise(svg_elem, this.goal_offsets)
         this.blockstate.make_interactive(this)
         this.move_counter = 0
         move_counter_elem.textContent = "0"

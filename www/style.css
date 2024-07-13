@@ -19,6 +19,10 @@
     filter: contrast(1.5);
 }
 
+#svg-puzzle>path.shadowGoal {
+    filter: opacity(0.25);
+}
+
 .puzzle-string {
     font-family: monospace;
 }
