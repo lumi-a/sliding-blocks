@@ -11,7 +11,7 @@
 }
 
 #svg-puzzle>path {
-    transition: transform 0.125s linear, filter 0.125s;
+    /*transition: transform 0.125s linear, filter 0.125s;*/
     stroke-width: 0.025;
 }
 
@@ -20,7 +20,8 @@
 }
 
 #svg-puzzle>path.shadowGoal {
-    filter: opacity(0.25);
+    fill-opacity: 0.25;
+    stroke-opacity: 0.5;
 }
 
 .puzzle-string {

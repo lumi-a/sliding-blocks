@@ -4,8 +4,6 @@ import interact from 'interactjs' // TODO: Only install the parts you need: http
 import JSConfetti from 'js-confetti'
 const jsConfetti = new JSConfetti()
 
-// TODO: Indicate goal
-
 // All I want for Christmas is proper JS data structures
 type Point = number
 const COMPONENT_BITS = 16
@@ -33,6 +31,9 @@ const scale = (v: Point, s: number) => p(x(v) * s, y(v) * s)
 const shift_shape = (shape: Shape, v: Point) => new Set([...shape].map(p => shift(p, v)))
 const unshift_shape = (shape: Shape, v: Point) => shift_shape(shape, scale(v, -1))
 const dot = (v: Point, w: Point) => x(v) * x(w) + y(v) * y(w)
+const square = (x: number) => x * x
+const dist2 = (v: Point, w: Point) => Math.sqrt(square(x(v) - x(w)) + square(y(v) - y(w)))
+const dist1 = (v: Point, w: Point) => Math.abs(x(v) - x(w)) + Math.abs(y(v) - y(w))
 
 type Shape = Set<Point>
 type Offset = Point
@@ -42,6 +43,15 @@ function is_subset(a: Shape, b: Shape): boolean {
 }
 function is_disjoint(a: Shape, b: Shape): boolean {
     return [...a].every(x => !b.has(x))
+}
+function union(shapes: Shape[]): Shape {
+    let union: Shape = new Set()
+    for (const shape of shapes) {
+        for (const point of shape) {
+            union.add(point)
+        }
+    }
+    return union
 }
 
 function get_extremes(coordinates_set: Shape): [Point, Point] {
@@ -129,7 +139,6 @@ function shape_to_path(shape: Shape, inset: number): string {
 const BOUNDS_CHAR: string = '.'
 
 function char_to_color(char: string, lightness: number = 0.75, alpha: number = 1): string {
-    // TODO: Better color palette
     // TODO: Dark mode stuff?
     if (char == BOUNDS_CHAR) {
         return `#BBB`
@@ -156,6 +165,8 @@ class Block {
     public svg_elem: SVGSVGElement
     private svg_sctm_inverse: SVGMatrix
     private svg_point: SVGPoint
+    private walking_offsets: Array<Offset>
+    private walking_offsets_time: number
 
 
     constructor(coordinates: Shape, char: string) {
@@ -172,8 +183,32 @@ class Block {
         return p(point.x, point.y)
     }
 
-    update_translation() {
-        this.path.style.transform = `translate(${x(this.offset)}px, ${y(this.offset)}px)`;
+    update_walking_offsets(walk: Array<Offset>) {
+        this.walking_offsets_time += walk.length
+        this.walking_offsets = walk.concat(this.walking_offsets)
+    }
+
+    update_translation(dt: number) {
+        const time_scale = 100
+        const walking_offsets = this.walking_offsets
+        const walking_offsets_time = this.walking_offsets_time
+        if (walking_offsets && walking_offsets.length > 0) {
+            const new_offsets_time = Math.max(0, walking_offsets_time - dt * Math.ceil(walking_offsets_time) ** 0.75 / time_scale)
+            this.walking_offsets_time = new_offsets_time
+            while (walking_offsets.length > new_offsets_time + 2) {
+                walking_offsets.pop()
+            }
+            if (walking_offsets.length === 1) {
+                const offy = this.walking_offsets[0]
+                this.path.style.transform = `translate(${x(offy)}px, ${y(offy)}px)`
+            } else {
+                const lambda = new_offsets_time % 1
+                const from = this.walking_offsets[Math.ceil(new_offsets_time)]
+                const to = this.walking_offsets[Math.floor(new_offsets_time)]
+                console.log(from, to)
+                this.path.style.transform = `translate(${lambda * x(from) + (1 - lambda) * x(to)}px, ${lambda * y(from) + (1 - lambda) * y(to)}px)`
+            }
+        }
     }
     get_coordinates(): Shape {
         return shift_shape(this.shape, this.offset)
@@ -243,7 +278,10 @@ class Block {
 
         svg_elem.appendChild(this.path)
 
-        this.update_translation()
+        this.walking_offsets = []
+        this.walking_offsets_time = 0
+        this.update_walking_offsets([this.offset])
+        this.update_translation(0)
     }
 
     make_interactive(puzzle: Puzzle, blockarr_ix: number) {
@@ -251,55 +289,69 @@ class Block {
             return
         }
         const blockstate = puzzle.blockstate
-        const valid_offset = (offset: Point) => {
-            const block = shift_shape(this.shape, offset)
-            // TODO: Maybe don't re-calculate bounds.get_coordinates every time?
-            // Also see is_valid function on blockstate class
-            if (!is_subset(block, blockstate.bounds.get_coordinates())) return false
-            for (let j = 0; j < blockstate.blocks.length; j++) {
-                if (j == blockarr_ix) continue
-                const other_block = blockstate.blocks[j].get_coordinates()
-                if (!is_disjoint(block, other_block)) return false
-            }
-            return true
-        }
+        const bounds = blockstate.bounds.get_coordinates()
         let start_cursor_position: Point
         let start_offset = this.offset
+        let valid_offsets: Set<Point>
         const start = (event: any) => {
             start_offset = this.offset
             start_cursor_position = unshift(this.client_to_point(event.client.x, event.client.y), start_offset)
             this.path.classList.add("dragging")
+
+            const other_blocks_union = union(blockstate.blocks.filter((b, i) => i != blockarr_ix).map(b => b.get_coordinates()))
+            const offset_is_valid = (offset: Point) => {
+                const block = shift_shape(this.shape, offset)
+                if (!is_subset(block, bounds)) return false
+                if (!is_disjoint(block, other_blocks_union)) return false
+                return true
+            }
+
+            let queue = [start_offset]
+            valid_offsets = new Set([start_offset])
+            while (queue.length > 0) {
+                let point: Point = queue.shift()
+                for (let neighbor of [shift(point, p(0, 1)), shift(point, p(0, -1)), shift(point, p(1, 0)), shift(point, p(-1, 0))]) {
+                    if (valid_offsets.has(neighbor) || !offset_is_valid(neighbor)) continue
+                    valid_offsets.add(neighbor)
+                    queue.push(neighbor)
+                }
+            }
         }
         const move = (event: any) => {
             const old_offset = this.offset
             const new_offset_unrounded = unshift(this.client_to_point(event.client.x, event.client.y), start_cursor_position)
 
-            const new_offset = p(Math.round(x(new_offset_unrounded)), Math.round(y(new_offset_unrounded)))
-            if (old_offset != new_offset && valid_offset(new_offset)) {
-                // Do BFS from old_offset to new_offset
-                // TODO: Perhaps do proper animations rather than CSS transitions
-                // TODO: Rather than do BFS every move-call, do bfs once for valid offsets in start-call and check if this is contained in valid offsets
-                // TODO: Better yet, do Floyd-Warshall and then "guess" the position the user wanted to move the block to by using the closest legal position (there always exists one because the initial position is legal)
+            // find closest offset to current position:
+            let new_offset = start_offset
+            let closest_distance = Infinity
+            for (let offset of valid_offsets) {
+                const dist = dist2(new_offset_unrounded, offset)
+                if (dist < closest_distance) {
+                    closest_distance = dist
+                    new_offset = offset
+                }
+            }
+            if (old_offset != new_offset) {
+                // Do BFS with path reconstruction from old_offset to new_offset
                 let queue = [old_offset]
-                let visited = new Set([old_offset])
-                let success = false
+                let parents: { [key: string]: Point | null } = { old_offset: null }
                 while (queue.length > 0) {
-                    let point: Point = queue.shift()
-                    if (point == new_offset) {
-                        success = true
-                        break
-                    }
+                    let point: Point = queue.shift()!
+                    if (point == new_offset) break
                     for (let neighbor of [shift(point, p(0, 1)), shift(point, p(0, -1)), shift(point, p(1, 0)), shift(point, p(-1, 0))]) {
-                        if (visited.has(neighbor) || !valid_offset(neighbor)) continue
-                        visited.add(neighbor)
+                        if (neighbor in parents || !valid_offsets.has(neighbor)) continue
+                        parents[neighbor] = point
                         queue.push(neighbor)
                     }
                 }
-                if (success) {
-                    this.offset = new_offset
-                    this.update_translation()
+                let path = [new_offset]
+                let backtrack = parents[new_offset]
+                while (backtrack !== old_offset) {
+                    path.push(backtrack)
+                    backtrack = parents[backtrack]
                 }
-
+                this.offset = new_offset
+                this.update_walking_offsets(path)
             }
         }
         const end = (event: any) => {
@@ -337,20 +389,6 @@ class Blockstate {
         [this.min, this.max] = get_extremes(bounds.shape)
         this.bounds = bounds
         this.blocks = blocks
-    }
-
-    is_valid() {
-        const bounds = this.bounds.get_coordinates()
-        const blocks = this.blocks.map(b => b.get_coordinates())
-        for (let block_ix = 0; block_ix < blocks.length; block_ix++) {
-            const block = blocks[block_ix]
-            if (!is_subset(block, bounds)) return false
-            for (let j = block_ix + 1; j < blocks.length; j++) {
-                const other_block = blocks[j]
-                if (!is_disjoint(block, other_block)) return false
-            }
-        }
-        return true
     }
 
     static blockstate_from_string(str: string) {
@@ -539,3 +577,12 @@ let current_puzzle: Puzzle = new Puzzle(`
       tt
 `, 5)
 current_puzzle.initialise(svg_puzzle)
+
+let timestamp: number
+function animate(t: number) {
+    const dt = timestamp ? t - timestamp : 0
+    timestamp = t
+    for (let block of current_puzzle.blockstate.blocks) block.update_translation(dt)
+    requestAnimationFrame(animate)
+}
+requestAnimationFrame(animate)
