@@ -119,14 +119,16 @@ function shape_to_path(shape: Shape): string {
 
 const BOUNDS_CHAR: string = '.'
 
-function char_to_color(char: string): string {
-    let code = char.charCodeAt(0)
+function char_to_color(char: string, lightness: number = 0.75, alpha: number = 1): string {
     // TODO: Better color palette
     // TODO: Dark mode stuff?
     if (char == BOUNDS_CHAR) {
         return `#BBB`
     }
-    return `rgb(${code * 54979 % 255},${code * 70769 % 255},${code * 10113 % 255})`
+    const code = char.charCodeAt(0)
+    const chroma = 0.2
+    const hue = (code * 65557) % 360
+    return `oklch(${lightness} ${chroma} ${hue} / ${alpha})`
 }
 
 const SVG_NAMESPACE = "http://www.w3.org/2000/svg"
@@ -168,10 +170,52 @@ class Block {
         return shift_shape(this.shape, this.offset)
     }
     initialise_elem(svg_elem: SVGSVGElement) {
-        let path = document.createElementNS("http://www.w3.org/2000/svg", "path")
-        path.setAttribute("d", shape_to_path(this.shape))
-        path.setAttribute("fill", char_to_color(this.char))
+        let path = document.createElementNS(SVG_NAMESPACE, "path")
         // TODO: Stroke, shadow, letter-pattern-fill
+        path.setAttribute("d", shape_to_path(this.shape))
+
+        // Fill-Pattern:
+        if (this.char !== BOUNDS_CHAR) {
+            const defs: SVGDefsElement = svg_elem.querySelector("defs") ?? svg_elem.appendChild(document.createElementNS(SVG_NAMESPACE, "defs"))
+            const pattern = document.createElementNS(SVG_NAMESPACE, "pattern")
+            const pattern_id = `block-pattern-${this.char}`
+
+            const [_, max] = get_extremes(this.shape)
+            pattern.setAttribute("id", pattern_id)
+            pattern.setAttribute("patternUnits", "userSpaceOnUse")
+            pattern.setAttribute("x", "-0.5")
+            pattern.setAttribute("y", "-0.5")
+            pattern.setAttribute("width", `${x(max) + 1}`)
+            pattern.setAttribute("height", `${y(max) + 1}`)
+            const rect = document.createElementNS(SVG_NAMESPACE, "rect")
+            rect.setAttribute("width", `${x(max) + 1}`)
+            rect.setAttribute("height", `${y(max) + 1}`)
+            rect.setAttribute("fill", char_to_color(this.char))
+            pattern.appendChild(rect)
+            const code = this.char.charCodeAt(0)
+            for (let p of this.shape) {
+                for (let i = 0; i < 10; i++) {
+                    const letter = document.createElementNS(SVG_NAMESPACE, "text") as SVGTextElement
+                    const X = (52.092819851131311425 * code + 13.087032255978894794 * i) % 1 + x(p)
+                    const Y = (28.640673508054986905 * code + 94.824207530838495049 * i) % 1 + y(p)
+                    const d = (14.336965871263130613 * code + 40.125163576904165817 * i) % 360
+                    const a = (72.313644289540589845 * code + 61.413884855320691933 * i) % 0.5
+                    const f = (75.427959404814958242 * code + 85.346753489292519779 * i) % 0.4 + 0.2
+                    letter.setAttribute("x", X.toString())
+                    letter.setAttribute("y", Y.toString())
+                    letter.setAttribute("fill", char_to_color(this.char, 0.5, a))
+                    letter.setAttribute("font-size", f.toString())
+                    letter.setAttribute("transform", `rotate(${d} ${X} ${Y})`)
+                    letter.textContent = this.char
+                    pattern.appendChild(letter)
+                }
+            }
+            defs.appendChild(pattern)
+            path.setAttribute("fill", `url(#${pattern_id})`)
+        } else {
+            path.setAttribute("fill", char_to_color(this.char))
+        }
+
         this.path = path
 
         this.svg_elem = svg_elem
