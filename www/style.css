@@ -11,9 +11,8 @@
 }
 
 #svg-puzzle>path {
-    stroke: black;
-    stroke-width: 0.025;
     transition: transform 0.125s linear, filter 0.125s;
+    stroke-width: 0.025;
 }
 
 #svg-puzzle>path.dragging {

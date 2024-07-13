@@ -17,10 +17,13 @@ module.exports = {
         test: /\.ts$/,
         use: "ts-loader",
         exclude: /node_modules/
+      }, {
+        test: /\.css$/i,
+        use: ["style-loader", "css-loader"],
       }
     ]
   },
-  plugins: [new CopyWebpackPlugin(["index.html", "style.css", "favicon.ico"])],
+  plugins: [new CopyWebpackPlugin(["index.html", "favicon.ico"])],
   experiments: {
     asyncWebAssembly: true,
     syncWebAssembly: true,

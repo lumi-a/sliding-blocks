@@ -1,3 +1,4 @@
+import './style.css'
 import { solve_puzzle, get_all_js_examples } from "sliding-blocks"
 import interact from 'interactjs' // TODO: Only install the parts you need: https://interactjs.io/docs/installation#npm-streamlined
 import JSConfetti from 'js-confetti'
@@ -177,12 +178,21 @@ class Block {
     get_coordinates(): Shape {
         return shift_shape(this.shape, this.offset)
     }
-    initialise_elem(svg_elem: SVGSVGElement) {
+    construct_elem_path(inset: number = 1 / 32): SVGPathElement {
         let path = document.createElementNS(SVG_NAMESPACE, "path")
-        path.setAttribute("d", shape_to_path(this.shape, this.char === BOUNDS_CHAR ? -1 / 32 : 1 / 32))
+        path.setAttribute("d", shape_to_path(this.shape, this.char === BOUNDS_CHAR ? -inset : inset))
         path.setAttribute("fill-rule", "evenodd")
+        path.setAttribute("stroke", char_to_color(this.char, 0.25))
+        if (this.char !== BOUNDS_CHAR) {
+            const pattern_id = `block-pattern-${this.char}`
+            path.setAttribute("fill", `url(#${pattern_id})`)
+        } else {
+            path.setAttribute("fill", "#CCC")
+        }
 
-        // Fill-Pattern:
+        return path
+    }
+    create_elem_pattern(svg_elem: SVGSVGElement) {
         if (this.char !== BOUNDS_CHAR) {
             const defs: SVGDefsElement = svg_elem.querySelector("defs") ?? svg_elem.appendChild(document.createElementNS(SVG_NAMESPACE, "defs"))
             const pattern = document.createElementNS(SVG_NAMESPACE, "pattern")
@@ -219,10 +229,11 @@ class Block {
                 }
             }
             defs.appendChild(pattern)
-            path.setAttribute("fill", `url(#${pattern_id})`)
-        } else {
-            path.setAttribute("fill", char_to_color(this.char))
         }
+    }
+    initialise_elem(svg_elem: SVGSVGElement) {
+        this.create_elem_pattern(svg_elem)
+        const path = this.construct_elem_path()
 
         this.path = path
 
