@@ -10,7 +10,7 @@ type Point = number
 const COMPONENT_BITS = 16
 const COMPONENT_MASK = (1 << COMPONENT_BITS) - 1
 const COMPONENT_SIGN_BIT = 1 << (COMPONENT_BITS - 1)
-const COMPONENT_PRECISION = 2
+const COMPONENT_PRECISION = 16
 function p(x: number, y: number): Point {
     // x,y ∈ ℤ * 1/COMPONENT_PRECISION, please
     const packedX = (Math.round(x * COMPONENT_PRECISION) & COMPONENT_MASK) >>> 0
@@ -60,7 +60,7 @@ function get_extremes(coordinates_set: Shape): [Point, Point] {
     return [p(min_x, min_y), p(max_x, max_y)]
 }
 
-function shape_to_path(shape: Shape): string {
+function shape_to_path(shape: Shape, inset: number): string {
     type Edgepoint = Point
     const DIRS = [p(1, 0), p(0, -1), p(-1, 0), p(0, 1)]
     let edgepoint_to_dir: Map<Edgepoint, number> = new Map()
@@ -91,8 +91,9 @@ function shape_to_path(shape: Shape): string {
     while ((start_edgepoint = edgepoint_to_dir.keys().next()?.value) && failsafe_counter++ < 10000) {
         let edgepoint: Edgepoint = start_edgepoint
         let dir: number = edgepoint_to_dir.get(edgepoint)
+        let drawpoint = shift(edgepoint, scale(DIRS[(dir + 3) % 4], inset))
 
-        path += `M${x(edgepoint)} ${y(edgepoint)}`
+        path += `M${x(drawpoint)} ${y(drawpoint)}`
         do {
             const dirvec: Point = DIRS[dir]
             const forward = scale(dirvec, 0.5)
@@ -100,6 +101,8 @@ function shape_to_path(shape: Shape): string {
             const left = scale(DIRS[(dir + 1) % 4], 0.5)
             const right = scale(DIRS[(dir + 3) % 4], 0.5)
             const center = shift(edgepoint, forward)
+            const horizontal = DIRS[(dir + 1) % 4]
+            const vertical = dirvec
             if (shape.has(shift(center, shift(left, forward)))) {
                 edgepoint = shift(center, left)
                 dir = (dir + 1) % 4
@@ -110,8 +113,11 @@ function shape_to_path(shape: Shape): string {
                 dir = (dir + 3) % 4
             }
 
-            //path += `Q${x(center)} ${y(center)} ${x(edgepoint)} ${y(edgepoint)}`
-            path += `C${x(center)} ${y(center)} ${x(center)} ${y(center)} ${x(edgepoint)} ${y(edgepoint)}`
+            const old_drawpoint = drawpoint
+            drawpoint = shift(edgepoint, scale(DIRS[(dir + 3) % 4], inset))
+            const center_drawpoint = shift(center, shift(scale(horizontal, dot(horizontal, unshift(old_drawpoint, center))), scale(vertical, dot(vertical, unshift(drawpoint, center)))))
+
+            path += `C${x(center_drawpoint)} ${y(center_drawpoint)} ${x(center_drawpoint)} ${y(center_drawpoint)} ${x(drawpoint)} ${y(drawpoint)}`
             edgepoint_to_dir.delete(edgepoint)
         } while (edgepoint != start_edgepoint && failsafe_counter++ < 10000)
         path += "Z"
@@ -173,7 +179,7 @@ class Block {
     }
     initialise_elem(svg_elem: SVGSVGElement) {
         let path = document.createElementNS(SVG_NAMESPACE, "path")
-        path.setAttribute("d", shape_to_path(this.shape))
+        path.setAttribute("d", shape_to_path(this.shape, this.char === BOUNDS_CHAR ? -1 / 32 : 1 / 32))
         path.setAttribute("fill-rule", "evenodd")
 
         // Fill-Pattern:
