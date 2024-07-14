@@ -26,13 +26,13 @@ pub struct Puzzle {
     pub goal: &'static str,
     pub min_moves: usize,
 }
-impl std::convert::Into<JsPuzzle> for Puzzle {
-    fn into(self) -> JsPuzzle {
-        JsPuzzle {
-            name: self.name.to_string(),
-            start: self.start.to_string(),
-            goal: self.goal.to_string(),
-            min_moves: self.min_moves,
+impl std::convert::From<Puzzle> for JsPuzzle {
+    fn from(puzzle: Puzzle) -> Self {
+        Self {
+            name: puzzle.name.to_string(),
+            start: puzzle.start.to_string(),
+            goal: puzzle.goal.to_string(),
+            min_moves: puzzle.min_moves,
         }
     }
 }

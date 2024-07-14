@@ -1,4 +1,6 @@
 pub mod examples;
+#[cfg(test)]
+mod tests;
 
 use bitvec::prelude::*;
 use colored::{self, Colorize};
@@ -652,7 +654,51 @@ fn misplaced_goalblocks_heuristic(
         .count()
 }
 
-// TODO: Add tests
+fn solve_puzzle_path(start: &str, goal: &str) -> Vec<Blockstate> {
+    let (
+        _bounds,
+        _shapekey,
+        start_blockstate,
+        nonintersectionkey,
+        goal_shapekey_key,
+        goal_target_offsets,
+        _start_reconstruction_map,
+        _width,
+        _height,
+    ) = puzzle_preprocessing(start, goal);
+
+    // If we have more than one goalblock, an astar heuristic helps speed things up.
+    // Otherwise, default to usual bfs
+    if goal_shapekey_key.len() > 1 {
+        pathfinding::directed::astar::astar(
+            &start_blockstate,
+            |blockstate| {
+                // TODO: More performant solution than using into_iter?
+                get_neighboring_blockstates(blockstate, &nonintersectionkey, &goal_shapekey_key)
+                    .into_iter()
+                    .map(|blockstate| (blockstate, 1))
+                    .collect_vec()
+            },
+            |blockstate| misplaced_goalblocks_heuristic(blockstate, &goal_target_offsets),
+            |blockstate| blockstate.goal_offsets == goal_target_offsets,
+        )
+        .unwrap()
+        .0
+    } else {
+        pathfinding::directed::bfs::bfs(
+            &start_blockstate,
+            |blockstate| {
+                get_neighboring_blockstates(blockstate, &nonintersectionkey, &goal_shapekey_key)
+            },
+            |blockstate| blockstate.goal_offsets == goal_target_offsets,
+        )
+        .unwrap()
+    }
+}
+
+fn solve_puzzle_minmoves(start: &str, goal: &str) -> usize {
+    solve_puzzle_path(start, goal).len() - 1
+}
 
 #[wasm_bindgen]
 pub fn solve_puzzle(start: &str, goal: &str) -> Vec<String> {
@@ -703,8 +749,8 @@ pub fn solve_puzzle(start: &str, goal: &str) -> Vec<String> {
             board[(offset.1 - 1) as usize][(offset.0 - 1) as usize] = BOUNDS_CHAR;
         }
 
-        for ((Shape, offset), c) in rm.iter() {
-            for Point(x, y) in Shape.iter() {
+        for ((shape, offset), c) in rm.iter() {
+            for Point(x, y) in shape.iter() {
                 board[(y + offset.1 - 1) as usize][(x + offset.0 - 1) as usize] = *c;
             }
         }
