@@ -205,7 +205,6 @@ class Block {
                 const lambda = new_offsets_time % 1
                 const from = this.walking_offsets[Math.ceil(new_offsets_time)]
                 const to = this.walking_offsets[Math.floor(new_offsets_time)]
-                console.log(from, to)
                 this.path.style.transform = `translate(${lambda * x(from) + (1 - lambda) * x(to)}px, ${lambda * y(from) + (1 - lambda) * y(to)}px)`
             }
         }
