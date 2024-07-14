@@ -38,17 +38,9 @@ impl std::convert::From<Puzzle> for JsPuzzle {
 }
 
 pub const ALL_EXAMPLES: [Puzzle; 6] = [
-    TEN_STEP_SOLUTION,
-    FOUR_BALLS,
-    THE_ELEVATOR_SWITCH,
-    GARBAGE_DISPOSAL,
-    THE_DIABOLICAL_BOX,
-    ROYAL_ESCAPE,
-];
-
-pub const TEN_STEP_SOLUTION: Puzzle = Puzzle {
-    name: "Ten-Step Solution",
-    start: r#"  
+    Puzzle {
+        name: "Ten-Step Solution",
+        start: r#"  
       A  
     11.  
     .22. 
@@ -56,7 +48,7 @@ pub const TEN_STEP_SOLUTION: Puzzle = Puzzle {
      .44 
      B   
     "#,
-    goal: r#"  
+        goal: r#"  
       B  
     ...  
     .... 
@@ -64,12 +56,11 @@ pub const TEN_STEP_SOLUTION: Puzzle = Puzzle {
      ... 
      A 
     "#,
-    min_moves: 10,
-};
-
-pub const FOUR_BALLS: Puzzle = Puzzle {
-    name: "Four Balls",
-    start: r#"
+        min_moves: 10,
+    },
+    Puzzle {
+        name: "Four Balls",
+        start: r#"
         A
     B|.--
      |##.
@@ -77,7 +68,7 @@ pub const FOUR_BALLS: Puzzle = Puzzle {
      ==.ID
      C
     "#,
-    goal: r#"
+        goal: r#"
         C
     D....
      ....
@@ -85,12 +76,11 @@ pub const FOUR_BALLS: Puzzle = Puzzle {
      ....B
      A
     "#,
-    min_moves: 28,
-};
-
-pub const THE_ELEVATOR_SWITCH: Puzzle = Puzzle {
-    name: "The Elevator Switch",
-    start: r#"
+        min_moves: 28,
+    },
+    Puzzle {
+        name: "The Elevator Switch",
+        start: r#"
        AA   
        AA   
     ...a....
@@ -101,7 +91,7 @@ pub const THE_ELEVATOR_SWITCH: Puzzle = Puzzle {
        BB
        BB
     "#,
-    goal: r#"
+        goal: r#"
        BB   
        BB   
     ........
@@ -112,12 +102,11 @@ pub const THE_ELEVATOR_SWITCH: Puzzle = Puzzle {
        AA
        AA
     "#,
-    min_moves: 12,
-};
-
-pub const GARBAGE_DISPOSAL: Puzzle = Puzzle {
-    name: "Garbage Disposal",
-    start: r#"
+        min_moves: 12,
+    },
+    Puzzle {
+        name: "Garbage Disposal",
+        start: r#"
       tt
       tt
     ......
@@ -127,7 +116,7 @@ pub const GARBAGE_DISPOSAL: Puzzle = Puzzle {
       bb
       ..
     "#,
-    goal: r#"
+        goal: r#"
       ..
       ..
     ......
@@ -137,12 +126,11 @@ pub const GARBAGE_DISPOSAL: Puzzle = Puzzle {
       tt
       tt
     "#,
-    min_moves: 31,
-};
-
-pub const THE_DIABOLICAL_BOX: Puzzle = Puzzle {
-    name: "The Diabolical Box",
-    start: r#"
+        min_moves: 31,
+    },
+    Puzzle {
+        name: "The Diabolical Box",
+        start: r#"
       ##    
       ##    
      +..L.  
@@ -153,7 +141,7 @@ pub const THE_DIABOLICAL_BOX: Puzzle = Puzzle {
       ..    
       ..
     "#,
-    goal: r#"
+        goal: r#"
       ..
       ..   
      .....  
@@ -164,22 +152,22 @@ pub const THE_DIABOLICAL_BOX: Puzzle = Puzzle {
       ##    
       ##
     "#,
-    min_moves: 78,
-};
-
-pub const ROYAL_ESCAPE: Puzzle = Puzzle {
-    name: "Royal Escape",
-    start: r#"
+        min_moves: 78,
+    },
+    Puzzle {
+        name: "Royal Escape",
+        start: r#"
     --==+
     ##|/.
     ##|*.
     __mm$
     "#,
-    goal: r#"
+        goal: r#"
     .....
     ...##
     ...##
     .....
     "#,
-    min_moves: 81,
-};
+        min_moves: 81,
+    },
+];
