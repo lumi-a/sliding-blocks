@@ -360,9 +360,10 @@ class Block {
                 puzzle.move_counter += 1
                 move_counter_elem.textContent = puzzle.move_counter.toString()
                 if (puzzle.won()) {
-                    if (puzzle.min_moves !== null && puzzle.move_counter < puzzle.min_moves) jsConfetti.addConfetti({ emojis: ["🐞"] })
-                    else if (puzzle.min_moves !== null && puzzle.move_counter === puzzle.min_moves) jsConfetti.addConfetti({ emojis: ["🏆"] })
-                    else jsConfetti.addConfetti()
+                    const confetti_number = 24
+                    if (puzzle.min_moves !== null && puzzle.move_counter < puzzle.min_moves) jsConfetti.addConfetti({ emojis: ["🐞"], confettiNumber: confetti_number })
+                    else if (puzzle.min_moves !== null && puzzle.move_counter === puzzle.min_moves) jsConfetti.addConfetti({ emojis: ["🏆"], confettiNumber: confetti_number })
+                    else jsConfetti.addConfetti({ confettiNumber: confetti_number })
                 }
             }
             this.path.classList.remove("dragging")

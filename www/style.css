@@ -4,14 +4,31 @@
     font-family: sans-serif;
 }
 
+html,
+body {
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+}
+
+header {
+    height: 2em;
+    width: 100%;
+    background: #DDD;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+#svg-puzzle-container,
 #svg-puzzle {
-    /* TODO: Make this responsive. */
+    height: 100%;
+    width: 100%;
     max-width: 100vw;
-    max-height: 100vh;
+    max-height: calc(100vh - 2em);
 }
 
 #svg-puzzle>path {
-    /*transition: transform 0.125s linear, filter 0.125s;*/
     stroke-width: 0.025;
 }
 
