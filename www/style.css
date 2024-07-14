@@ -11,11 +11,16 @@ body {
     overflow: hidden;
 }
 
+body {
+    background: linear-gradient(0.25turn, #BBCCEE, #CCEEFF, #CCDDAA, #EEEEBB, #FFCCCC);
+}
+
 header {
     height: 2em;
     width: 100%;
-    background: #DDD;
+    background: #FFF8;
     display: flex;
+    gap: 1em;
     justify-content: center;
     align-items: center;
 }
