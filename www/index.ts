@@ -363,7 +363,7 @@ class Block {
                     const confetti_number = 24
                     if (puzzle.min_moves !== null && puzzle.move_counter < puzzle.min_moves) jsConfetti.addConfetti({ emojis: ["🐞"], confettiNumber: confetti_number })
                     else if (puzzle.min_moves !== null && puzzle.move_counter === puzzle.min_moves) jsConfetti.addConfetti({ emojis: ["🏆"], confettiNumber: confetti_number })
-                    else jsConfetti.addConfetti({ confettiNumber: confetti_number })
+                    else jsConfetti.addConfetti({ confettiNumber: confetti_number, confettiColors: puzzle.blockstate.blocks.map(b => char_to_color(b.char)) })
                 }
             }
             this.path.classList.remove("dragging")
@@ -523,6 +523,7 @@ class Puzzle {
 
 const change_puzzle_dialog = document.getElementById("change-puzzle-dialog") as HTMLDialogElement
 const change_puzzle_btn = document.getElementById("change-puzzle-btn") as HTMLButtonElement
+const reset_puzzle_btn = document.getElementById("reset-puzzle-btn") as HTMLButtonElement
 const puzzle_textarea_start = document.getElementById("puzzle-textarea-start") as HTMLTextAreaElement
 const puzzle_textarea_goal = document.getElementById("puzzle-textarea-goal") as HTMLTextAreaElement
 const puzzle_submit_btn = document.getElementById("puzzle-submit-btn") as HTMLButtonElement
@@ -531,6 +532,9 @@ change_puzzle_btn.addEventListener("click", () => {
     puzzle_textarea_goal.value = current_puzzle.goal_string
     puzzle_textarea_start.value = current_puzzle.start_string
     change_puzzle_dialog.showModal()
+})
+reset_puzzle_btn.addEventListener("click", () => {
+    current_puzzle.initialise(svg_puzzle)
 })
 
 puzzle_submit_btn.addEventListener("click", e => {
@@ -554,29 +558,11 @@ puzzle_selection.addEventListener("change", () => {
     // TODO: Use indices as names instead
     const name = puzzle_selection.value
     const js_puzzle = predefined_puzzles.find(js_puzzle => js_puzzle.name === name)!
-    puzzle_textarea_start.value = js_puzzle.start
-    puzzle_textarea_goal.value = js_puzzle.goal
+    puzzle_textarea_start.value = Blockstate.blockstate_from_string(js_puzzle.start).to_string()
+    puzzle_textarea_goal.value = Blockstate.blockstate_from_string(js_puzzle.goal).to_string()
 })
 
-let current_puzzle: Puzzle = new Puzzle(`
-      tt
-      tt
-    ......
-    .ppoo.
-     ypog
-     ....
-      ..
-      ..
-`, `
-      ..
-      ..
-    ......
-    ......
-     ....
-     ....
-      tt
-      tt
-`, 5)
+let current_puzzle: Puzzle = new Puzzle(predefined_puzzles[0].start, predefined_puzzles[0].goal)
 current_puzzle.initialise(svg_puzzle)
 
 let timestamp: number

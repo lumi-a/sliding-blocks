@@ -1,4 +1,4 @@
-const CopyWebpackPlugin = require("copy-webpack-plugin");
+const HtmlWebpackPlugin = require('html-webpack-plugin');
 const path = require("path");
 
 module.exports = {
@@ -20,10 +20,12 @@ module.exports = {
       }, {
         test: /\.css$/i,
         use: ["style-loader", "css-loader"],
-      }
+      },
     ]
   },
-  plugins: [new CopyWebpackPlugin(["index.html", "favicon.ico"])],
+  plugins: [new HtmlWebpackPlugin({
+    template: "./index.html"
+  })],
   experiments: {
     asyncWebAssembly: true,
     syncWebAssembly: true,
