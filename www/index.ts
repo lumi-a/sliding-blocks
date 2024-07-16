@@ -143,7 +143,7 @@ function char_to_color(char: string, lightness: number = 0.75, alpha: number = 1
     if (char == BOUNDS_CHAR) {
         return `#BBB`
     }
-    const code = char.charCodeAt(0)
+    const code = char.codePointAt(0)
     const chroma = 0.2
     const hue = (code * 65557) % 360
     return `oklch(${lightness} ${chroma} ${hue} / ${alpha})`
@@ -244,7 +244,7 @@ class Block {
             rect.setAttribute("height", `${y(max) + 1}`)
             rect.setAttribute("fill", char_to_color(this.char))
             pattern.appendChild(rect)
-            const code = this.char.charCodeAt(0)
+            const code = this.char.codePointAt(0)
             for (let p of this.shape) {
                 for (let i = 0; i < 10; i++) {
                     const letter = document.createElementNS(SVG_NAMESPACE, "text") as SVGTextElement
