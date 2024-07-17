@@ -538,13 +538,13 @@ fn preprocessing(start: &str, goal: &str) -> Result<PreprocessingOutput, SolvePu
     ) -> Result<PreprocessingOutput, SolvePuzzleError> {
         // Check that bounds match.
         // We already know that neither are empty, so we can unwrap safely here.
-        let start_bounds = start_chartopoints.get(&BOUNDS_CHAR).unwrap();
-        let goal_bounds = goal_chartopoints.get(&BOUNDS_CHAR).unwrap();
+        let start_bounds = &start_chartopoints[&BOUNDS_CHAR];
+        let goal_bounds = &goal_chartopoints[&BOUNDS_CHAR];
         if start_bounds != goal_bounds {
             return Err(SolvePuzzleError::MismatchedBounds);
         }
 
-        let bounds: Shape = start_chartopoints.get(&BOUNDS_CHAR).unwrap().clone();
+        let bounds: Shape = start_chartopoints[&BOUNDS_CHAR].clone();
 
         let mut char_to_shape: HashMap<char, Shape> = HashMap::new();
         let mut shape_to_chars_and_offsets: HashMap<Shape, Vec<(char, Offset)>> = HashMap::new();
@@ -607,7 +607,7 @@ fn preprocessing(start: &str, goal: &str) -> Result<PreprocessingOutput, SolvePu
             .map(|(shape, chars_and_offsets)| (shape.clone(), chars_and_offsets.clone()))
             .collect();
 
-        raw_shapekey.sort_by(
+        raw_shapekey.sort_unstable_by(
             |(a_shape, a_chars_and_offsets), (b_shape, b_chars_and_offsets)| {
                 let a_shape_only_for_goals = a_chars_and_offsets
                     .iter()
@@ -642,14 +642,27 @@ fn preprocessing(start: &str, goal: &str) -> Result<PreprocessingOutput, SolvePu
             .collect();
         shapekey.shrink_to_fit();
 
+        // Sort goal-blocks by size, too.
+        // This almost never matters, because most puzzles have at most one
+        // goal-block anyway, and those that don't often have goal-blocks of
+        // the same size.
+        goal_chars_startoffset_targetoffset.sort_unstable_by(|(ca, _, _), (cb, _, _)| {
+            let a_size = char_to_shape[ca].len();
+            let b_size = char_to_shape[cb].len();
+            if a_size == b_size {
+                ca.cmp(cb)
+            } else {
+                b_size.cmp(&a_size)
+            }
+        });
+
         // For all goal-blocks, now look up which index their shape in shapekey corresponds to
-        // TODO: Should we sort this first?
         let mut goal_shapekey_key: GoalShapekeyKey = goal_chars_startoffset_targetoffset
             .iter()
             .map(|(c, _, _)| {
                 raw_shapekey
                     .iter()
-                    .position(|(shape, _)| shape == char_to_shape.get(c).unwrap())
+                    .position(|(shape, _)| *shape == char_to_shape[c])
                     .unwrap()
             })
             .collect();
