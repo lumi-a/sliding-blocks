@@ -138,9 +138,9 @@ impl std::fmt::Display for SolvePuzzleError {
     }
 }
 impl std::error::Error for SolvePuzzleError {}
-impl Into<JsValue> for SolvePuzzleError {
-    fn into(self) -> JsValue {
-        JsValue::from(self.to_string())
+impl From<SolvePuzzleError> for JsValue {
+    fn from(val: SolvePuzzleError) -> Self {
+        JsValue::from(val.to_string())
     }
 }
 
@@ -592,10 +592,10 @@ fn preprocessing(start: &str, goal: &str) -> Result<PreprocessingOutput, SolvePu
             |(a_shape, a_chars_and_offsets), (b_shape, b_chars_and_offsets)| {
                 let a_shape_only_for_goals = a_chars_and_offsets
                     .iter()
-                    .all(|(c, _)| goal_chartopoints.get(c).is_some());
+                    .all(|(c, _)| goal_chartopoints.contains_key(c));
                 let b_shape_only_for_goals = b_chars_and_offsets
                     .iter()
-                    .all(|(c, _)| goal_chartopoints.get(c).is_some());
+                    .all(|(c, _)| goal_chartopoints.contains_key(c));
 
                 // Sort shapes that are only for goals last
                 if a_shape_only_for_goals && !b_shape_only_for_goals {
@@ -641,7 +641,7 @@ fn preprocessing(start: &str, goal: &str) -> Result<PreprocessingOutput, SolvePu
             .map(|(_, chars_and_offsets)| {
                 chars_and_offsets
                     .iter()
-                    .filter(|(c, _)| goal_chartopoints.get(c).is_none())
+                    .filter(|(c, _)| !goal_chartopoints.contains_key(c))
                     .map(|(_, offset)| offset.clone())
                     .collect()
             })
@@ -728,12 +728,12 @@ fn auxiliaries_to_path(
             start_blockstate,
             |blockstate| {
                 // TODO: More performant solution than using into_iter?
-                get_neighboring_blockstates(blockstate, &nonintersectionkey, &goal_shapekey_key)
+                get_neighboring_blockstates(blockstate, nonintersectionkey, goal_shapekey_key)
                     .into_iter()
                     .map(|blockstate| (blockstate, 1))
                     .collect_vec()
             },
-            |blockstate| misplaced_goalblocks_heuristic(blockstate, &goal_target_offsets),
+            |blockstate| misplaced_goalblocks_heuristic(blockstate, goal_target_offsets),
             |blockstate| blockstate.goal_offsets == *goal_target_offsets,
         )
         .map(|path| path.0)
@@ -741,7 +741,7 @@ fn auxiliaries_to_path(
         pathfinding::directed::bfs::bfs(
             start_blockstate,
             |blockstate| {
-                get_neighboring_blockstates(blockstate, &nonintersectionkey, &goal_shapekey_key)
+                get_neighboring_blockstates(blockstate, nonintersectionkey, goal_shapekey_key)
             },
             |blockstate| blockstate.goal_offsets == *goal_target_offsets,
         )
