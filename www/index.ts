@@ -420,6 +420,7 @@ class Blockstate {
 
         let bounds: Block = new Block(unshift_shape(bounds_coordinates, min), BOUNDS_CHAR)
         let blocks: Array<Block> = Object.entries(char_to_blockcoordinates).map(([c, coordinates]) => new Block(unshift_shape(coordinates, min), c))
+        blocks.sort((a, b) => a.char.localeCompare(b.char)) // Any sort order suffices
 
         return new Blockstate(bounds, blocks)
     }
@@ -584,7 +585,7 @@ class Puzzle {
             const block = blocks[blockarr_ix]
             block.offset = this.history[this.history_ix][blockarr_ix]
         }
-        move_counter_elem.textContent = this.history_ix.toString()
+        move_counter_elem.textContent = (this.history_ix === this.history.length - 1) ? this.history_ix.toString() : `${this.history_ix}/${this.history.length - 1}`
     }
 
     initialise(svg_elem: SVGSVGElement) {
@@ -604,6 +605,7 @@ const reset_puzzle_btn = document.getElementById("reset-puzzle-btn") as HTMLButt
 const puzzle_textarea_start = document.getElementById("puzzle-textarea-start") as HTMLTextAreaElement
 const puzzle_textarea_goal = document.getElementById("puzzle-textarea-goal") as HTMLTextAreaElement
 const puzzle_submit_btn = document.getElementById("puzzle-submit-btn") as HTMLButtonElement
+const puzzle_solve_btn = document.getElementById("puzzle-solve-btn") as HTMLButtonElement
 const move_counter_elem = document.getElementById("move-counter") as HTMLSpanElement
 const history_forward_btn = document.getElementById("history-forward") as HTMLButtonElement
 const history_backward_btn = document.getElementById("history-backward") as HTMLButtonElement
@@ -629,6 +631,21 @@ puzzle_submit_btn.addEventListener("click", e => {
     change_puzzle_dialog.close()
     current_puzzle = new Puzzle(start_string, goal_string)
     current_puzzle.initialise(svg_puzzle)
+})
+puzzle_solve_btn.addEventListener("click", e => {
+    e.preventDefault()
+    const start_string = puzzle_textarea_start.value
+    const goal_string = puzzle_textarea_goal.value
+    const solution = solve_puzzle(start_string, goal_string)
+    const solution_blockstates = solution.map(s => Blockstate.blockstate_from_string(s))
+    change_puzzle_dialog.close()
+    current_puzzle = new Puzzle(start_string, goal_string)
+    current_puzzle.initialise(svg_puzzle)
+    for (let blockstate of solution_blockstates.slice(1)) {
+        current_puzzle.add_to_history(blockstate)
+    }
+    current_puzzle.history_ix = 0
+    current_puzzle.update_blockstate_from_history()
 })
 
 const puzzle_selection = document.getElementById("puzzle-selection") as HTMLSelectElement
