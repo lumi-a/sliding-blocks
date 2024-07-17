@@ -1,6 +1,4 @@
 pub mod examples;
-#[cfg(test)]
-mod tests;
 
 use bitvec::prelude::*;
 use colored::{self, Colorize};
@@ -101,6 +99,7 @@ type GoalTargetOffsets = Vec<Offset>; // At what offset is a block in a goal-pos
 // This assumption will be satisfied when using the Nonintersectionkey in the algorithm.
 
 type ShapevecForNik<T> = Vec<T>;
+#[cfg_attr(test, derive(PartialEq, Debug))]
 struct Nonintersectionkey(usize, ShapevecForNik<Vec<ShapevecForNik<BitVec>>>);
 impl std::ops::Index<(usize, &Offset, usize, &Offset)> for Nonintersectionkey {
     type Output = bool;
@@ -112,6 +111,36 @@ impl std::ops::Index<(usize, &Offset, usize, &Offset)> for Nonintersectionkey {
     ) -> &Self::Output {
         &self.1[shape_ix_a][*xa as usize + (*ya as usize) * self.0][shape_ix_b]
             [*xb as usize + (*yb as usize) * self.0]
+    }
+}
+
+#[derive(Debug)]
+#[cfg_attr(test, derive(PartialEq))]
+pub enum SolvePuzzleError {
+    MismatchedBounds,
+    MismatchedGoalShapes(char),
+    GoalblockWithoutStartingblock(char),
+    WidthTooLarge,
+    HeightTooLarge,
+    EmptyPuzzle,
+}
+impl std::fmt::Display for SolvePuzzleError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            // TODO: Better error messages.
+            SolvePuzzleError::MismatchedBounds => write!(f, "Start-bounds don't match goal-bounds."),
+            SolvePuzzleError::MismatchedGoalShapes(c) => write!(f, "The shape of the goal-block '{c}' in the start-configuration doesn't match its shape in the goal-configuration."),
+            SolvePuzzleError::GoalblockWithoutStartingblock(c) => write!(f, "The block '{c}' is in the goal-configuration, but not in the start-configuration."),
+            SolvePuzzleError::WidthTooLarge => write!(f, "The width of the puzzle is too large to fit into the data-type the solver uses. If you encounter this while trying to solve an actual puzzle, please file an issue."),
+            SolvePuzzleError::HeightTooLarge => write!(f, "The height of the puzzle is too large to fit into the data-type the solver uses. If you encounter this while trying to solve an actual puzzle, please file an issue."),
+            SolvePuzzleError::EmptyPuzzle => write!(f, "There are no blocks."),
+        }
+    }
+}
+impl std::error::Error for SolvePuzzleError {}
+impl Into<JsValue> for SolvePuzzleError {
+    fn into(self) -> JsValue {
+        JsValue::from(self.to_string())
     }
 }
 
@@ -390,99 +419,108 @@ fn print_puzzle(
     }
 }
 
-fn puzzle_preprocessing(
-    start: &str,
-    goal: &str,
-) -> (
-    Bounds,
-    Shapekey,
-    Blockstate,
-    Nonintersectionkey,
-    GoalShapekeyKey,
-    GoalTargetOffsets,
-    ReconstructionMap,
-    Width,
-    Height,
-) {
-    fn string_to_chartocoors(s: &str) -> (CharToPoints, Width, Height) {
-        let mut min_x = Coor::MAX;
-        let mut min_y = Coor::MAX;
-        let mut max_x = Coor::MIN;
-        let mut max_y = Coor::MIN;
+#[cfg_attr(test, derive(PartialEq, Debug))]
+struct Auxiliaries {
+    bounds: Bounds,
+    shapekey: Shapekey,
+    start_blockstate: Blockstate,
+    nonintersectionkey: Nonintersectionkey,
+    goal_shapekey_key: GoalShapekeyKey,
+    goal_target_offsets: GoalTargetOffsets,
+    reconstruction_map: ReconstructionMap,
+    width: Width,
+    height: Height,
+}
 
-        let mut temp_points: Vec<(char, Point)> = Vec::new();
+#[cfg_attr(test, derive(PartialEq, Debug))]
+enum PreprocessingOutput {
+    EmptyPuzzle,
+    ProperPuzzle(Auxiliaries),
+}
+
+fn preprocessing(start: &str, goal: &str) -> Result<PreprocessingOutput, SolvePuzzleError> {
+    // TODO: This code is awful, and awfully named.
+    enum StringToCharToPointsResult {
+        EmptyPuzzle,
+        ProperPuzzle(CharToPoints, Width, Height),
+    }
+    fn string_to_chartopoints(s: &str) -> Result<StringToCharToPointsResult, SolvePuzzleError> {
+        let mut min_x = usize::MAX;
+        let mut min_y = usize::MAX;
+        let mut max_x = usize::MIN;
+        let mut max_y = usize::MIN;
+
+        let mut char_annotated_coordinates: Vec<(char, (usize, usize))> = Vec::new();
 
         for (y, l) in s.lines().enumerate() {
             for (x, c) in l.chars().enumerate() {
                 if !c.is_whitespace() {
-                    let x = x as Coor;
-                    let y = y as Coor;
-                    // TODO: Check that x and y fit into the Coor type.
-                    // Doing so would mean we'd have to return a Result instead.
-                    // Currently, this doesn't even panic, but continues innocently (yet wrongly)
-                    // TODO: Then also let x, y be usize here, and only later convert
-                    // them to Coor after subtraction
-                    // TODO: Should min_x, min_y, max_x, max_y be handles using get_extremes instead?
-                    //       Would make code less performant, but more legible
                     min_x = min(min_x, x);
                     min_y = min(min_y, y);
                     max_x = max(max_x, x);
                     max_y = max(max_y, y);
-                    temp_points.push((c, Point(x, y)));
+                    char_annotated_coordinates.push((c, (x, y)));
                     if c != BOUNDS_CHAR {
-                        temp_points.push((BOUNDS_CHAR, Point(x, y)));
+                        char_annotated_coordinates.push((BOUNDS_CHAR, (x, y)));
                     }
                 }
             }
         }
-        // TODO: Doesn't handle the case where the puzzle is empty
-        let width: Width = max_x - min_x + 1;
-        let height: Height = max_y - min_y + 1;
-        // TODO: Doesn't handle the case where the puzzle is empty
-        let shift = Point(min_x - 1, min_y - 1);
+        if char_annotated_coordinates.is_empty() {
+            return Ok(StringToCharToPointsResult::EmptyPuzzle);
+        }
+        let width_usize: usize = max_x + 1 - min_x;
+        let height_usize: usize = max_y + 1 - min_y;
+
+        // Try converting to Coor, and otherwise throw SolvePuzzleError::WidthTooLarge
+        println!("u {} {}", width_usize, height_usize);
+        let width: Width = width_usize
+            .try_into()
+            .map_err(|_| SolvePuzzleError::WidthTooLarge)?;
+        let height: Height = height_usize
+            .try_into()
+            .map_err(|_| SolvePuzzleError::HeightTooLarge)?;
+        println!("c {} {}", width, height);
 
         let mut char_to_points: CharToPoints = CharToPoints::new();
-        for (c, coor) in temp_points {
-            let shifted_point = coor.sub(&shift); // !!!
-            char_to_points.entry(c).or_default().insert(shifted_point);
+        for (c, pair) in char_annotated_coordinates {
+            let (x_usize, y_usize) = (pair.0 + 1 - min_x, pair.1 + 1 - min_y);
+            let x: Coor = x_usize
+                .try_into()
+                .map_err(|_| SolvePuzzleError::WidthTooLarge)?;
+            let y: Coor = y_usize
+                .try_into()
+                .map_err(|_| SolvePuzzleError::HeightTooLarge)?;
+            let point = Point(x, y);
+            char_to_points.entry(c).or_default().insert(point);
         }
 
-        (char_to_points, width, height)
+        Ok(StringToCharToPointsResult::ProperPuzzle(
+            char_to_points,
+            width,
+            height,
+        ))
     }
-    let (start_chartocoors, width, height) = string_to_chartocoors(start);
-    let (goal_chartocoors, goal_width, goal_height) = string_to_chartocoors(goal);
 
-    // TODO: Handle this gracefully rather than panicking
-    assert_eq!(
-        start_chartocoors
-            .get(&BOUNDS_CHAR)
-            .unwrap_or(&Points::new()),
-        goal_chartocoors.get(&BOUNDS_CHAR).unwrap_or(&Points::new()),
-        "The start and goal must have the same bounds."
-    );
+    fn process_proper_puzzle(
+        start_chartopoints: CharToPoints,
+        goal_chartopoints: CharToPoints,
+        width: Width,
+        height: Height,
+    ) -> Result<PreprocessingOutput, SolvePuzzleError> {
+        // Check that bounds match.
+        // We already know that neither are empty, so we can unwrap safely here.
+        let start_bounds = start_chartopoints.get(&BOUNDS_CHAR).unwrap();
+        let goal_bounds = goal_chartopoints.get(&BOUNDS_CHAR).unwrap();
+        if start_bounds != goal_bounds {
+            return Err(SolvePuzzleError::MismatchedBounds);
+        }
 
-    // TODO: Handle this gracefully rather than panicking
-    assert_eq!(width, goal_width, "start_width and goal_width don't match. This should never happen, as bounds are already asserted to be the same.");
-    assert_eq!(height, goal_height, "start_height and goal_height don't match. This should never happen, as bounds are already asserted to be the same.");
-
-    fn extract_auxiliaries(
-        start_chartopoints: &CharToPoints,
-        goal_chartopoints: &CharToPoints,
-    ) -> (
-        Bounds,
-        Shapekey,
-        Blockstate,
-        GoalShapekeyKey,
-        GoalTargetOffsets,
-        ReconstructionMap,
-    ) {
-        // TODO: Handle empty strings gracefully
-        // TODO: Also maybe don't use clone, but I'm not into ownership enough to think through how to handle this
         let bounds: Shape = start_chartopoints.get(&BOUNDS_CHAR).unwrap().clone();
 
         let mut char_to_shape: HashMap<char, Shape> = HashMap::new();
         let mut shape_to_chars_and_offsets: HashMap<Shape, Vec<(char, Offset)>> = HashMap::new();
-        let mut start_reconstruction_map: ReconstructionMap = ReconstructionMap::new();
+        let mut reconstruction_map: ReconstructionMap = ReconstructionMap::new();
         let mut goal_chars_startoffset_targetoffset: Vec<(char, Offset, Offset)> = Vec::new();
         for (c, start_points) in start_chartopoints.iter() {
             if c == &BOUNDS_CHAR {
@@ -502,7 +540,7 @@ fn puzzle_preprocessing(
                 .entry(shape.clone())
                 .or_default()
                 .push((*c, (&shape_min).into()));
-            start_reconstruction_map.insert((shape, (&shape_min).into()), *c);
+            reconstruction_map.insert((shape, (&shape_min).into()), *c);
 
             if let Some(goal_points) = goal_chartopoints.get(c) {
                 // TODO: Because we're currently in the start-loop, and won't separately
@@ -517,6 +555,31 @@ fn puzzle_preprocessing(
                     (&shape_min).into(),
                     (&target_min).into(),
                 ));
+            }
+        }
+        let mut char_to_goalshape: HashMap<char, Shape> = HashMap::new();
+        for (c, goal_points) in goal_chartopoints.iter() {
+            // We already know the bounds match, so we don't need to care about those
+            if c == &BOUNDS_CHAR {
+                continue;
+            }
+
+            let (shape_min, _) = get_extremes(goal_points);
+            let shape: Shape = goal_points
+                .iter()
+                .map(|point| point.sub(&shape_min))
+                .collect();
+
+            // This is only used to map goal-shapes to their indices in shapekey later
+            char_to_goalshape.insert(*c, shape.clone());
+        }
+        // Check that the start and goal shapes are the same
+        for (c, goalshape) in char_to_goalshape.iter() {
+            let startshape = char_to_shape
+                .get(c)
+                .ok_or(SolvePuzzleError::GoalblockWithoutStartingblock(*c))?;
+            if startshape != goalshape {
+                return Err(SolvePuzzleError::MismatchedGoalShapes(*c));
             }
         }
 
@@ -540,10 +603,8 @@ fn puzzle_preprocessing(
                 } else if !a_shape_only_for_goals && b_shape_only_for_goals {
                     Ordering::Less
                 } else {
-                    // If both or neither are only for goals, sort by size first
-                    // (Idea being: If shapes are larger, we find intersections earlier)
-                    // ((which probably won't matter anyway))
-                    // (((but we need a total order)))
+                    // If both or neither are only for goals, sort by size firste idea
+                    // being: If shapes are larger, we find intersections earlier
                     let a_size = a_shape.len();
                     let b_size = b_shape.len();
                     if a_size == b_size {
@@ -604,37 +665,34 @@ fn puzzle_preprocessing(
             .collect_vec();
         goal_target_offsets.shrink_to_fit();
 
-        (
+        let nonintersectionkey = build_nonintersectionkey(&bounds, &shapekey, width, height);
+
+        Ok(PreprocessingOutput::ProperPuzzle(Auxiliaries {
             bounds,
             shapekey,
-            blockstate,
+            start_blockstate: blockstate,
+            nonintersectionkey,
             goal_shapekey_key,
             goal_target_offsets,
-            start_reconstruction_map,
-        )
+            reconstruction_map,
+            width,
+            height,
+        }))
     }
 
-    let (
-        bounds,
-        shapekey,
-        start_blockstate,
-        goal_shapekey_key,
-        goal_target_offsets,
-        reconstruction_map,
-    ) = extract_auxiliaries(&start_chartocoors, &goal_chartocoors);
-    let nonintersectionkey = build_nonintersectionkey(&bounds, &shapekey, width, height);
+    let start_stc_result = string_to_chartopoints(start)?;
+    let goal_stc_result = string_to_chartopoints(goal)?;
 
-    (
-        bounds,
-        shapekey,
-        start_blockstate,
-        nonintersectionkey,
-        goal_shapekey_key,
-        goal_target_offsets,
-        reconstruction_map,
-        width,
-        height,
-    )
+    match (start_stc_result, goal_stc_result) {
+        (StringToCharToPointsResult::EmptyPuzzle, StringToCharToPointsResult::EmptyPuzzle) => {
+            Ok(PreprocessingOutput::EmptyPuzzle)
+        }
+        (
+            StringToCharToPointsResult::ProperPuzzle(start_chartopoints, width, height),
+            StringToCharToPointsResult::ProperPuzzle(goal_chartopoints, _goal_width, _goal_height),
+        ) => process_proper_puzzle(start_chartopoints, goal_chartopoints, width, height),
+        _ => Err(SolvePuzzleError::MismatchedBounds),
+    }
 }
 
 // TODO: Prove admissibility
@@ -654,24 +712,20 @@ fn misplaced_goalblocks_heuristic(
         .count()
 }
 
-fn solve_puzzle_path(start: &str, goal: &str) -> Vec<Blockstate> {
-    let (
-        _bounds,
-        _shapekey,
+fn auxiliaries_to_path(
+    Auxiliaries {
         start_blockstate,
         nonintersectionkey,
         goal_shapekey_key,
         goal_target_offsets,
-        _start_reconstruction_map,
-        _width,
-        _height,
-    ) = puzzle_preprocessing(start, goal);
-
+        ..
+    }: &Auxiliaries,
+) -> Option<Vec<Blockstate>> {
     // If we have more than one goalblock, an astar heuristic helps speed things up.
     // Otherwise, default to usual bfs
     if goal_shapekey_key.len() > 1 {
         pathfinding::directed::astar::astar(
-            &start_blockstate,
+            start_blockstate,
             |blockstate| {
                 // TODO: More performant solution than using into_iter?
                 get_neighboring_blockstates(blockstate, &nonintersectionkey, &goal_shapekey_key)
@@ -680,145 +734,190 @@ fn solve_puzzle_path(start: &str, goal: &str) -> Vec<Blockstate> {
                     .collect_vec()
             },
             |blockstate| misplaced_goalblocks_heuristic(blockstate, &goal_target_offsets),
-            |blockstate| blockstate.goal_offsets == goal_target_offsets,
+            |blockstate| blockstate.goal_offsets == *goal_target_offsets,
         )
-        .unwrap()
-        .0
+        .map(|path| path.0)
     } else {
         pathfinding::directed::bfs::bfs(
-            &start_blockstate,
+            start_blockstate,
             |blockstate| {
                 get_neighboring_blockstates(blockstate, &nonintersectionkey, &goal_shapekey_key)
             },
-            |blockstate| blockstate.goal_offsets == goal_target_offsets,
+            |blockstate| blockstate.goal_offsets == *goal_target_offsets,
         )
-        .unwrap()
     }
 }
 
-fn solve_puzzle_minmoves(start: &str, goal: &str) -> usize {
-    solve_puzzle_path(start, goal).len() - 1
+fn solve_puzzle_path(start: &str, goal: &str) -> Result<Option<Vec<Blockstate>>, SolvePuzzleError> {
+    match preprocessing(start, goal)? {
+        PreprocessingOutput::ProperPuzzle(auxiliaries) => Ok(auxiliaries_to_path(&auxiliaries)),
+        PreprocessingOutput::EmptyPuzzle => Err(SolvePuzzleError::EmptyPuzzle),
+    }
+}
+
+pub fn solve_puzzle_minmoves(start: &str, goal: &str) -> Result<Option<usize>, SolvePuzzleError> {
+    let maybe_path = solve_puzzle_path(start, goal)?;
+    Ok(maybe_path.map(|path| path.len() - 1))
 }
 
 #[wasm_bindgen]
-pub fn solve_puzzle(start: &str, goal: &str) -> Vec<String> {
-    let (
-        bounds,
-        shapekey,
-        start_blockstate,
-        nonintersectionkey,
-        goal_shapekey_key,
-        goal_target_offsets,
-        start_reconstruction_map,
-        width,
-        height,
-    ) = puzzle_preprocessing(start, goal);
+pub fn solve_puzzle(start: &str, goal: &str) -> Result<Option<Vec<String>>, SolvePuzzleError> {
+    match preprocessing(start, goal)? {
+        PreprocessingOutput::EmptyPuzzle => Err(SolvePuzzleError::EmptyPuzzle),
+        PreprocessingOutput::ProperPuzzle(auxiliaries) => {
+            Ok(auxiliaries_to_path(&auxiliaries).map(|path| {
+                let width = auxiliaries.width;
+                let height = auxiliaries.height;
+                let bounds = auxiliaries.bounds;
+                let shapekey = auxiliaries.shapekey;
+                let goal_shapekey_key = auxiliaries.goal_shapekey_key;
 
-    // If we have more than one goalblock, an astar heuristic helps speed things up.
-    // Otherwise, default to usual bfs
-    let path = if goal_shapekey_key.len() > 1 {
-        pathfinding::directed::astar::astar(
-            &start_blockstate,
-            |blockstate| {
-                // TODO: More performant solution than using into_iter?
-                get_neighboring_blockstates(blockstate, &nonintersectionkey, &goal_shapekey_key)
-                    .into_iter()
-                    .map(|blockstate| (blockstate, 1))
-                    .collect_vec()
-            },
-            |blockstate| misplaced_goalblocks_heuristic(blockstate, &goal_target_offsets),
-            |blockstate| blockstate.goal_offsets == goal_target_offsets,
-        )
-        .unwrap()
-        .0
-    } else {
-        pathfinding::directed::bfs::bfs(
-            &start_blockstate,
-            |blockstate| {
-                get_neighboring_blockstates(blockstate, &nonintersectionkey, &goal_shapekey_key)
-            },
-            |blockstate| blockstate.goal_offsets == goal_target_offsets,
-        )
-        .unwrap()
-    };
+                // Reconstruct path
+                let reconstruction_map_to_string = |rm: &ReconstructionMap| -> String {
+                    let mut board: Vec<Vec<char>> =
+                        vec![vec![' '; width as usize]; height as usize];
+                    for offset in &bounds {
+                        board[(offset.1 - 1) as usize][(offset.0 - 1) as usize] = BOUNDS_CHAR;
+                    }
 
-    // Reconstruct path
-    let reconstruction_map_to_string = |rm: &ReconstructionMap| -> String {
-        let mut board: Vec<Vec<char>> = vec![vec![' '; width as usize]; height as usize];
-        for offset in &bounds {
-            board[(offset.1 - 1) as usize][(offset.0 - 1) as usize] = BOUNDS_CHAR;
-        }
+                    for ((shape, offset), c) in rm.iter() {
+                        for Point(x, y) in shape.iter() {
+                            board[(y + offset.1 - 1) as usize][(x + offset.0 - 1) as usize] = *c;
+                        }
+                    }
 
-        for ((shape, offset), c) in rm.iter() {
-            for Point(x, y) in shape.iter() {
-                board[(y + offset.1 - 1) as usize][(x + offset.0 - 1) as usize] = *c;
-            }
-        }
+                    board
+                        .iter()
+                        .map(|row| row.iter().collect::<String>())
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                };
+                let mut reconstruction_map = auxiliaries.reconstruction_map;
+                let mut string_path = vec![reconstruction_map_to_string(&reconstruction_map)];
+                let mut previous_blockstate = &path[0];
+                for blockstate in path.iter().skip(1) {
+                    'check_single_block: {
+                        // nongoal-blocks
+                        for (shape_ix, (offsets, previous_offsets)) in blockstate
+                            .nongoal_offsets
+                            .iter()
+                            .zip(previous_blockstate.nongoal_offsets.iter())
+                            .enumerate()
+                        {
+                            if *offsets != *previous_offsets {
+                                // TODO: Probably safe unwrap, but still, maybe handle this more gracefully
+                                let old_offset =
+                                    previous_offsets.difference(offsets).next().unwrap();
+                                let new_offset =
+                                    offsets.difference(previous_offsets).next().unwrap();
+                                let shape = &shapekey[shape_ix];
 
-        board
-            .iter()
-            .map(|row| row.iter().collect::<String>())
-            .collect::<Vec<_>>()
-            .join("\n")
-    };
-    let mut reconstruction_map = start_reconstruction_map;
-    let mut string_path = vec![reconstruction_map_to_string(&reconstruction_map)];
-    let mut previous_blockstate = &path[0];
-    for blockstate in path.iter().skip(1) {
-        'check_single_block: {
-            // nongoal-blocks
-            for (shape_ix, (offsets, previous_offsets)) in blockstate
-                .nongoal_offsets
-                .iter()
-                .zip(previous_blockstate.nongoal_offsets.iter())
-                .enumerate()
-            {
-                if *offsets != *previous_offsets {
-                    // TODO: Probably safe unwrap, but still, maybe handle this more gracefully
-                    let old_offset = previous_offsets.difference(offsets).next().unwrap();
-                    let new_offset = offsets.difference(previous_offsets).next().unwrap();
-                    let shape = &shapekey[shape_ix];
+                                // TODO: This is sooo ugly
+                                let c = reconstruction_map
+                                    .remove(&(shape.clone(), old_offset.clone()))
+                                    .unwrap();
 
-                    // TODO: This is sooo ugly
-                    let c = reconstruction_map
-                        .remove(&(shape.clone(), old_offset.clone()))
-                        .unwrap();
+                                reconstruction_map.insert((shape.clone(), new_offset.clone()), c);
 
-                    reconstruction_map.insert((shape.clone(), new_offset.clone()), c);
+                                break 'check_single_block;
+                            }
+                        }
 
-                    break 'check_single_block;
+                        // goal-blocks
+                        for (goalvec_ix, (offset, previous_offset)) in blockstate
+                            .goal_offsets
+                            .iter()
+                            .zip(previous_blockstate.goal_offsets.iter())
+                            .enumerate()
+                        {
+                            if *offset != *previous_offset {
+                                // TODO: Probably safe unwrap, but still, maybe handle this more gracefully
+                                let old_offset = previous_offset;
+                                let new_offset = offset;
+                                let shape = &shapekey[goal_shapekey_key[goalvec_ix]];
+
+                                // TODO: This is sooo ugly
+                                let c = reconstruction_map
+                                    .remove(&(shape.clone(), old_offset.clone()))
+                                    .unwrap();
+
+                                reconstruction_map.insert((shape.clone(), new_offset.clone()), c);
+
+                                break 'check_single_block;
+                            }
+                        }
+                    }
+                    // TODO: Maybe check if reconstruction_map changed at all?
+                    string_path.push(reconstruction_map_to_string(&reconstruction_map));
+
+                    previous_blockstate = blockstate;
                 }
-            }
 
-            // goal-blocks
-            for (goalvec_ix, (offset, previous_offset)) in blockstate
-                .goal_offsets
-                .iter()
-                .zip(previous_blockstate.goal_offsets.iter())
-                .enumerate()
-            {
-                if *offset != *previous_offset {
-                    // TODO: Probably safe unwrap, but still, maybe handle this more gracefully
-                    let old_offset = previous_offset;
-                    let new_offset = offset;
-                    let shape = &shapekey[goal_shapekey_key[goalvec_ix]];
-
-                    // TODO: This is sooo ugly
-                    let c = reconstruction_map
-                        .remove(&(shape.clone(), old_offset.clone()))
-                        .unwrap();
-
-                    reconstruction_map.insert((shape.clone(), new_offset.clone()), c);
-
-                    break 'check_single_block;
-                }
-            }
+                string_path
+            }))
         }
-        // TODO: Maybe check if reconstruction_map changed at all?
-        string_path.push(reconstruction_map_to_string(&reconstruction_map));
+    }
+}
 
-        previous_blockstate = blockstate;
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_preprocessing() {
+        assert_eq!(solve_puzzle("", ""), Err(SolvePuzzleError::EmptyPuzzle));
+        assert_eq!(preprocessing("", ""), Ok(PreprocessingOutput::EmptyPuzzle));
+        assert_eq!(
+            preprocessing("          ", "    "),
+            Ok(PreprocessingOutput::EmptyPuzzle)
+        );
+        assert_eq!(
+            preprocessing(
+                "
+             	     
+        ",
+                "
+             	     
+
+             	     
+            "
+            ),
+            Ok(PreprocessingOutput::EmptyPuzzle)
+        );
+        assert_eq!(
+            preprocessing("a", "b"),
+            Err(SolvePuzzleError::GoalblockWithoutStartingblock('b'))
+        );
+        let wide_str: &str = &"a".repeat(u8::MAX as usize + 1);
+        let tall_str: &str = &"a
+        "
+        .repeat(u8::MAX as usize + 1);
+        assert_eq!(
+            preprocessing(wide_str, wide_str),
+            Err(SolvePuzzleError::WidthTooLarge)
+        );
+        assert_eq!(
+            preprocessing(tall_str, tall_str),
+            Err(SolvePuzzleError::HeightTooLarge)
+        );
+        assert_eq!(
+            preprocessing("aa", "a."),
+            Err(SolvePuzzleError::MismatchedGoalShapes('a'))
+        );
+        assert_eq!(
+            preprocessing("a.", "a"),
+            Err(SolvePuzzleError::MismatchedBounds)
+        );
     }
 
-    string_path
+    #[test]
+    fn test_examples() {
+        for puzzle in examples::ALL_EXAMPLES {
+            println!("{} {}", &puzzle.start, &puzzle.goal);
+            assert_eq!(
+                Ok(Some(puzzle.min_moves)),
+                solve_puzzle_minmoves(&puzzle.start, &puzzle.goal)
+            );
+        }
+    }
 }
