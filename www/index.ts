@@ -356,12 +356,11 @@ class Block {
         const end = (event: any) => {
             // Is new blockstate different from before?
             if (start_offset !== this.offset) {
-                puzzle.move_counter += 1
-                move_counter_elem.textContent = puzzle.move_counter.toString()
+                puzzle.add_to_history(blockstate)
                 if (puzzle.won()) {
                     const confetti_number = 24
-                    if (puzzle.min_moves !== null && puzzle.move_counter < puzzle.min_moves) jsConfetti.addConfetti({ emojis: ["🐞"], confettiNumber: confetti_number })
-                    else if (puzzle.min_moves !== null && puzzle.move_counter === puzzle.min_moves) jsConfetti.addConfetti({ emojis: ["🏆"], confettiNumber: confetti_number })
+                    if (puzzle.min_moves !== null && puzzle.history_ix < puzzle.min_moves) jsConfetti.addConfetti({ emojis: ["🐞"], confettiNumber: confetti_number })
+                    else if (puzzle.min_moves !== null && puzzle.history_ix === puzzle.min_moves) jsConfetti.addConfetti({ emojis: ["🏆"], confettiNumber: confetti_number })
                     else jsConfetti.addConfetti({ confettiNumber: confetti_number, confettiColors: puzzle.blockstate.blocks.map(b => char_to_color(b.char)) })
                 }
             }
@@ -484,13 +483,13 @@ class Puzzle {
     public start_string: string
     public goal_string: string
     public min_moves: number | null
-    public move_counter: number // TODO: Should this be a global variable instead?
+    public history_ix: number
+    public history: Array<Array<Offset>>
     public blockstate: Blockstate
     public goal_offsets: Array<Offset | null> // TODO: This is awful
 
     constructor(start_string: string, goal_string: string, min_moves: number | null = null) {
         this.min_moves = min_moves
-        this.move_counter = 0
 
         // TODO: Lots of error-checking on shapes that's also done in Rust
         const start_blockstate = Blockstate.blockstate_from_string(start_string)
@@ -511,12 +510,91 @@ class Puzzle {
         return this.blockstate.blocks.every((b, ix) => goal_offsets[ix] === null || b.offset === goal_offsets[ix])
     }
 
+    add_to_history(blockstate: Blockstate) {
+        while (this.history.length > this.history_ix + 1) this.history.pop()
+        this.history.push(blockstate.blocks.map(x => x.offset))
+        this.history_ix++
+        move_counter_elem.textContent = this.history_ix.toString()
+    }
+    // TODO: Disable buttons when history at limit
+    history_forward() {
+        if (this.history_ix < this.history.length - 1) {
+            this.history_ix++
+            this.update_blockstate_from_history()
+        }
+    }
+    history_backward() {
+        if (this.history_ix > 0) {
+            this.history_ix--
+            this.update_blockstate_from_history()
+        }
+    }
+    update_blockstate_from_history() {
+        const blockstate = this.blockstate
+        const blocks = blockstate.blocks
+        const bounds = blockstate.bounds.get_coordinates()
+        for (let blockarr_ix = 0; blockarr_ix < blocks.length; blockarr_ix++) {
+            const block = blocks[blockarr_ix]
+            const old_offset = block.offset
+            const new_offset = this.history[this.history_ix][blockarr_ix]
+            if (old_offset !== new_offset) {
+                const other_blocks_union = union(blocks.filter((b, i) => i != blockarr_ix).map(b => b.get_coordinates()))
+                const offset_is_valid = (offset: Point) => {
+                    const offset_block = shift_shape(block.shape, offset)
+                    if (!is_subset(offset_block, bounds)) return false
+                    if (!is_disjoint(offset_block, other_blocks_union)) return false
+                    return true
+                }
+                // Do BFS with path reconstruction from old_offset to new_offset
+                let queue = [old_offset]
+                let parents: { [key: Point]: Point | null } = {}
+                parents[old_offset] = null
+                let success = false
+                while (queue.length > 0) {
+                    let point: Point = queue.shift()!
+                    if (point == new_offset) {
+                        success = true
+                        break
+                    }
+                    for (let neighbor of [shift(point, p(0, 1)), shift(point, p(0, -1)), shift(point, p(1, 0)), shift(point, p(-1, 0))]) {
+                        if (neighbor in parents || !offset_is_valid(neighbor)) continue
+                        parents[neighbor] = point
+                        queue.push(neighbor)
+                    }
+                }
+                if (success) {
+                    let path = []
+                    let backtrack = new_offset
+                    while (backtrack !== old_offset) {
+                        path.push(backtrack)
+                        backtrack = parents[backtrack]
+                    }
+                    block.update_walking_offsets(path)
+                } else {
+                    // This should never happen.
+                    block.update_walking_offsets([new_offset])
+                }
+            }
+        }
+        // Finally, update all the offsets for real
+        // (We should only ever one offset in the first place, so we could
+        //  get away with doing this in the previous loop already, but if
+        //  anything ever breaks, this makes it easier to hunt down)
+        for (let blockarr_ix = 0; blockarr_ix < blocks.length; blockarr_ix++) {
+            const block = blocks[blockarr_ix]
+            block.offset = this.history[this.history_ix][blockarr_ix]
+        }
+        move_counter_elem.textContent = this.history_ix.toString()
+    }
+
     initialise(svg_elem: SVGSVGElement) {
         this.blockstate = Blockstate.blockstate_from_string(this.start_string)
         this.blockstate.initialise(svg_elem, this.goal_offsets)
         this.blockstate.make_interactive(this)
-        this.move_counter = 0
-        move_counter_elem.textContent = "0"
+
+        this.history_ix = -1
+        this.history = []
+        this.add_to_history(this.blockstate)
     }
 }
 
@@ -527,6 +605,8 @@ const puzzle_textarea_start = document.getElementById("puzzle-textarea-start") a
 const puzzle_textarea_goal = document.getElementById("puzzle-textarea-goal") as HTMLTextAreaElement
 const puzzle_submit_btn = document.getElementById("puzzle-submit-btn") as HTMLButtonElement
 const move_counter_elem = document.getElementById("move-counter") as HTMLSpanElement
+const history_forward_btn = document.getElementById("history-forward") as HTMLButtonElement
+const history_backward_btn = document.getElementById("history-backward") as HTMLButtonElement
 change_puzzle_btn.addEventListener("click", () => {
     puzzle_textarea_goal.value = current_puzzle.goal_string
     puzzle_textarea_start.value = current_puzzle.start_string
@@ -534,6 +614,12 @@ change_puzzle_btn.addEventListener("click", () => {
 })
 reset_puzzle_btn.addEventListener("click", () => {
     current_puzzle.initialise(svg_puzzle)
+})
+history_backward_btn.addEventListener("click", () => {
+    current_puzzle.history_backward()
+})
+history_forward_btn.addEventListener("click", () => {
+    current_puzzle.history_forward()
 })
 
 puzzle_submit_btn.addEventListener("click", e => {
