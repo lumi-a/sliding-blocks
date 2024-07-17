@@ -59,6 +59,7 @@ header {
     gap: 1em;
     width: 20em;
     align-items: center;
+    border-radius: 0.5em;
 }
 
 #puzzle-dialog-buttons {

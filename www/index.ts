@@ -57,7 +57,6 @@ function union(shapes: Shape[]): Shape {
 function get_extremes(coordinates_set: Shape): [Point, Point] {
     // Extract min-x and min-y.
     // Assumes that coordinatesSet is nonempty.
-    // TODO: Is that a misassumption?
     let min_x = Number.MAX_SAFE_INTEGER
     let min_y = Number.MAX_SAFE_INTEGER
     let max_x = Number.MIN_SAFE_INTEGER
