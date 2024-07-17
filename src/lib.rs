@@ -41,7 +41,6 @@ type Shape = BTreeSet<Point>; // nonempty. min-x == 0, min-y == 0
 fn get_extremes(coordinates_set: &Points) -> (Point, Point) {
     // Extract min-x and min-y.
     // Assumes that coordinatesSet is nonempty.
-    // TODO: Is that a misassumption?
     let mut min_x = Coor::MAX;
     let mut min_y = Coor::MAX;
     let mut max_x = Coor::MIN;
@@ -727,7 +726,6 @@ fn preprocessing(start: &str, goal: &str) -> Result<PreprocessingOutput, SolvePu
     }
 }
 
-// TODO: Prove admissibility
 fn misplaced_goalblocks_heuristic(
     blockstate: &Blockstate,
     goal_target_offsets: &GoalTargetOffsets,
@@ -735,6 +733,10 @@ fn misplaced_goalblocks_heuristic(
     // You might think that, rather than just counting the misplaced blocks,
     // we could also check their distance from their goal_target_offsets.
     // I implemented and benchmarked that, and it was worse than this.
+
+    // TODO: Should we carry heuristic-stats throughout the A* nodes and
+    // only update the counter if a goal-block enters or leaves its target
+    // position?
 
     blockstate
         .goal_offsets
@@ -837,14 +839,12 @@ pub fn solve_puzzle(start: &str, goal: &str) -> Result<Option<Vec<String>>, Solv
                             .enumerate()
                         {
                             if *offsets != *previous_offsets {
-                                // TODO: Probably safe unwrap, but still, maybe handle this more gracefully
                                 let old_offset =
                                     previous_offsets.difference(offsets).next().unwrap();
                                 let new_offset =
                                     offsets.difference(previous_offsets).next().unwrap();
                                 let shape = &shapekey[shape_ix];
 
-                                // TODO: This is sooo ugly
                                 let c = reconstruction_map
                                     .remove(&(shape.clone(), old_offset.clone()))
                                     .unwrap();
@@ -863,12 +863,10 @@ pub fn solve_puzzle(start: &str, goal: &str) -> Result<Option<Vec<String>>, Solv
                             .enumerate()
                         {
                             if *offset != *previous_offset {
-                                // TODO: Probably safe unwrap, but still, maybe handle this more gracefully
                                 let old_offset = previous_offset;
                                 let new_offset = offset;
                                 let shape = &shapekey[goal_shapekey_key[goalvec_ix]];
 
-                                // TODO: This is sooo ugly
                                 let c = reconstruction_map
                                     .remove(&(shape.clone(), old_offset.clone()))
                                     .unwrap();
@@ -879,7 +877,6 @@ pub fn solve_puzzle(start: &str, goal: &str) -> Result<Option<Vec<String>>, Solv
                             }
                         }
                     }
-                    // TODO: Maybe check if reconstruction_map changed at all?
                     string_path.push(reconstruction_map_to_string(&reconstruction_map));
 
                     previous_blockstate = blockstate;
