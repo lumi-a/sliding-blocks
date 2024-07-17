@@ -144,7 +144,7 @@ impl std::fmt::Display for SolvePuzzleError {
             SolvePuzzleError::GoalblockWithoutStartingblock(c) => write!(f, "The block '{c}' is in the goal-configuration, but not in the start-configuration."),
             SolvePuzzleError::WidthTooLarge => write!(f, "The width of the puzzle is too large to fit into the data-type the solver uses. If you encounter this while trying to solve an actual puzzle, please file an issue."),
             SolvePuzzleError::HeightTooLarge => write!(f, "The height of the puzzle is too large to fit into the data-type the solver uses. If you encounter this while trying to solve an actual puzzle, please file an issue."),
-            SolvePuzzleError::EmptyPuzzle => write!(f, "There are no blocks."),
+            SolvePuzzleError::EmptyPuzzle => write!(f, "Please add some blocks."),
         }
     }
 }

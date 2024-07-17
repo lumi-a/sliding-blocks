@@ -609,9 +609,11 @@ const puzzle_solve_btn = document.getElementById("puzzle-solve-btn") as HTMLButt
 const move_counter_elem = document.getElementById("move-counter") as HTMLSpanElement
 const history_forward_btn = document.getElementById("history-forward") as HTMLButtonElement
 const history_backward_btn = document.getElementById("history-backward") as HTMLButtonElement
+const error_msg_span = document.getElementById("error-msg") as HTMLSpanElement
 change_puzzle_btn.addEventListener("click", () => {
     puzzle_textarea_goal.value = current_puzzle.goal_string
     puzzle_textarea_start.value = current_puzzle.start_string
+    error_msg_span.textContent = ""
     change_puzzle_dialog.showModal()
 })
 reset_puzzle_btn.addEventListener("click", () => {
@@ -629,6 +631,7 @@ puzzle_submit_btn.addEventListener("click", e => {
     const start_string = puzzle_textarea_start.value
     const goal_string = puzzle_textarea_goal.value
     change_puzzle_dialog.close()
+    error_msg_span.textContent = ""
     current_puzzle = new Puzzle(start_string, goal_string)
     current_puzzle.initialise(svg_puzzle)
 })
@@ -636,23 +639,32 @@ puzzle_solve_btn.addEventListener("click", e => {
     e.preventDefault()
     const start_string = puzzle_textarea_start.value
     const goal_string = puzzle_textarea_goal.value
-    const solution = solve_puzzle(start_string, goal_string)
-    const solution_blockstates = solution.map(s => Blockstate.blockstate_from_string(s))
-    change_puzzle_dialog.close()
-    current_puzzle = new Puzzle(start_string, goal_string)
-    current_puzzle.initialise(svg_puzzle)
-    for (let blockstate of solution_blockstates.slice(1)) {
-        current_puzzle.add_to_history(blockstate)
+    let solution
+    try {
+        solution = solve_puzzle(start_string, goal_string)
+        if (solution === undefined) {
+            error_msg_span.textContent = "No solution exists."
+        } else {
+            const solution_blockstates = solution.map(s => Blockstate.blockstate_from_string(s))
+            change_puzzle_dialog.close()
+            current_puzzle = new Puzzle(start_string, goal_string)
+            current_puzzle.initialise(svg_puzzle)
+            for (let blockstate of solution_blockstates.slice(1)) {
+                current_puzzle.add_to_history(blockstate)
+            }
+            current_puzzle.history_ix = 0
+            current_puzzle.update_blockstate_from_history()
+        }
+    } catch (e) {
+        error_msg_span.textContent = e.toString()
     }
-    current_puzzle.history_ix = 0
-    current_puzzle.update_blockstate_from_history()
 })
 
 const puzzle_selection = document.getElementById("puzzle-selection") as HTMLSelectElement
-const predefined_puzzles = get_all_js_examples()
+const predefined_puzzles = get_all_js_examples().sort((a, b) => a.min_moves - b.min_moves)
 for (let js_puzzle of predefined_puzzles) {
     const option = document.createElement("option")
-    option.textContent = js_puzzle.name
+    option.textContent = `[${js_puzzle.min_moves}] ${js_puzzle.name}`
     option.value = js_puzzle.name
     puzzle_selection.appendChild(option)
 }
@@ -660,6 +672,7 @@ puzzle_selection.addEventListener("change", () => {
     // TODO: Use indices as names instead
     const name = puzzle_selection.value
     const js_puzzle = predefined_puzzles.find(js_puzzle => js_puzzle.name === name)!
+    error_msg_span.textContent = ""
     puzzle_textarea_start.value = Blockstate.blockstate_from_string(js_puzzle.start).to_string()
     puzzle_textarea_goal.value = Blockstate.blockstate_from_string(js_puzzle.goal).to_string()
 })

@@ -4,11 +4,18 @@
     font-family: sans-serif;
 }
 
+header *,
+dialog * {
+    font-size: min(3vw, 3vh, 20px);
+}
+
 html,
 body {
     margin: 0;
     padding: 0;
     overflow: hidden;
+    height: 100%;
+    width: 100%;
 }
 
 body {
@@ -44,6 +51,24 @@ header {
 #svg-puzzle>path.shadowGoal {
     fill-opacity: 0.25;
     stroke-opacity: 0.5;
+}
+
+#change-puzzle-dialog[open] {
+    display: flex;
+    flex-direction: column;
+    gap: 1em;
+    width: 20em;
+    align-items: center;
+}
+
+#puzzle-dialog-buttons {
+    display: flex;
+    flex-direction: row;
+    gap: 1em;
+}
+
+#error-msg {
+    color: darkred;
 }
 
 .puzzle-string {
