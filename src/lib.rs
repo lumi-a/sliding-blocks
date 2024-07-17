@@ -1,7 +1,6 @@
 pub mod examples;
 
 use bitvec::prelude::*;
-use colored::{self, Colorize};
 use itertools::Itertools;
 use std::cmp::{max, min, Ordering};
 use std::collections::{BTreeSet, HashMap};
@@ -370,14 +369,11 @@ fn print_puzzle(
     width: Width,
     height: Height,
 ) {
-    // TODO: Colors aren't the best choice here, because colors WILL change after
-    // blocks move, giving the illusion of some blocks having changed shapes
-
     // Create vec of blocks:
     let mut blocks: Vec<Points> = Vec::new();
     for (shape, offsets) in shapekey.iter().zip(blockstate.nongoal_offsets.iter()) {
         for offset in offsets {
-            // Just create shift-shape method already
+            // TODO: Just create shift-shape method already
             let block: Points = shape.iter().map(|p| p.add(&offset.into())).collect();
             blocks.push(block);
         }
@@ -391,31 +387,65 @@ fn print_puzzle(
     }
     let blocks = blocks;
 
-    const IN_BLOCK: &str = "██";
-    const IN_BOUNDS: &str = "  ";
-    const OUT_OF_BOUNDS: &str = "░░";
     for y in 0..=(height + 1) {
+        let mut line0: Vec<&str> = Vec::new();
+        let mut line1: Vec<&str> = Vec::new();
         for x in 0..=(width + 1) {
             // Find block that contains (x, y)
             let option_block_ix: Option<usize> =
                 blocks.iter().position(|block| block.contains(&Point(x, y)));
             match option_block_ix {
                 Some(block_ix) => {
-                    let r = ((block_ix + 1) * 7573 % 256) as u8;
-                    let g = ((block_ix + 1) * 6841 % 256) as u8;
-                    let b = ((block_ix + 1) * 5953 % 256) as u8;
-                    print!("{}", IN_BLOCK.truecolor(r, g, b));
+                    let t = y > 0 && blocks[block_ix].contains(&Point(x, y - 1));
+                    let b = blocks[block_ix].contains(&Point(x, y + 1));
+                    let l = x > 0 && blocks[block_ix].contains(&Point(x - 1, y));
+                    let r = blocks[block_ix].contains(&Point(x + 1, y));
+                    let tl = y > 0 && x > 0 && blocks[block_ix].contains(&Point(x - 1, y - 1));
+                    let tr = y > 0 && blocks[block_ix].contains(&Point(x + 1, y - 1));
+                    let bl = x > 0 && blocks[block_ix].contains(&Point(x - 1, y + 1));
+                    let br = blocks[block_ix].contains(&Point(x + 1, y + 1));
+                    line0.push(match (t, l, tl) {
+                        (false, false, _) => "╭─",
+                        (true, false, _) => "│ ",
+                        (false, true, _) => "──",
+                        (true, true, false) => "╯ ",
+                        (true, true, true) => "  ",
+                    });
+                    line0.push(match (t, r, tr) {
+                        (false, false, _) => "─╮",
+                        (true, false, _) => " │",
+                        (false, true, _) => "──",
+                        (true, true, false) => " ╰",
+                        (true, true, true) => "  ",
+                    });
+                    line1.push(match (b, l, bl) {
+                        (false, false, _) => "╰─",
+                        (true, false, _) => "│ ",
+                        (false, true, _) => "──",
+                        (true, true, false) => "╮ ",
+                        (true, true, true) => "  ",
+                    });
+                    line1.push(match (b, r, br) {
+                        (false, false, _) => "─╯",
+                        (true, false, _) => " │",
+                        (false, true, _) => "──",
+                        (true, true, false) => " ╭",
+                        (true, true, true) => "  ",
+                    });
                 }
                 None => {
                     if bounds.contains(&Point(x, y)) {
-                        print!("{}", IN_BOUNDS);
+                        line0.push("    ");
+                        line1.push("    ");
                     } else {
-                        print!("{}", OUT_OF_BOUNDS);
+                        line0.push("████");
+                        line1.push("████");
                     }
                 }
             }
         }
-        println!();
+        println!("{}", line0.concat());
+        println!("{}", line1.concat());
     }
 }
 
@@ -473,14 +503,12 @@ fn preprocessing(start: &str, goal: &str) -> Result<PreprocessingOutput, SolvePu
         let height_usize: usize = max_y + 1 - min_y;
 
         // Try converting to Coor, and otherwise throw SolvePuzzleError::WidthTooLarge
-        println!("u {} {}", width_usize, height_usize);
         let width: Width = width_usize
             .try_into()
             .map_err(|_| SolvePuzzleError::WidthTooLarge)?;
         let height: Height = height_usize
             .try_into()
             .map_err(|_| SolvePuzzleError::HeightTooLarge)?;
-        println!("c {} {}", width, height);
 
         let mut char_to_points: CharToPoints = CharToPoints::new();
         for (c, pair) in char_annotated_coordinates {
@@ -543,12 +571,6 @@ fn preprocessing(start: &str, goal: &str) -> Result<PreprocessingOutput, SolvePu
             reconstruction_map.insert((shape, (&shape_min).into()), *c);
 
             if let Some(goal_points) = goal_chartopoints.get(c) {
-                // TODO: Because we're currently in the start-loop, and won't separately
-                // do a goal-loop, we'll silently ignore any characters in the goalstring
-                // that aren't present in the startstring. If there are chars in the goalstring
-                // that are not in the startstring, then that puzzle is not correctly posed,
-                // which we should communicate instead.
-
                 let (target_min, _) = get_extremes(goal_points);
                 goal_chars_startoffset_targetoffset.push((
                     *c,
@@ -563,14 +585,11 @@ fn preprocessing(start: &str, goal: &str) -> Result<PreprocessingOutput, SolvePu
             if c == &BOUNDS_CHAR {
                 continue;
             }
-
             let (shape_min, _) = get_extremes(goal_points);
             let shape: Shape = goal_points
                 .iter()
                 .map(|point| point.sub(&shape_min))
                 .collect();
-
-            // This is only used to map goal-shapes to their indices in shapekey later
             char_to_goalshape.insert(*c, shape.clone());
         }
         // Check that the start and goal shapes are the same
