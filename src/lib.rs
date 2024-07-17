@@ -98,7 +98,10 @@ type GoalTargetOffsets = Vec<Offset>; // At what offset is a block in a goal-pos
 
 type ShapevecForNik<T> = Vec<T>;
 #[cfg_attr(test, derive(PartialEq, Debug))]
-struct Nonintersectionkey(usize, ShapevecForNik<Vec<ShapevecForNik<BitVec>>>);
+struct Nonintersectionkey {
+    width: usize,
+    nik: ShapevecForNik<Vec<ShapevecForNik<BitVec>>>,
+}
 impl std::ops::Index<(usize, &Offset, usize, &Offset)> for Nonintersectionkey {
     type Output = bool;
 
@@ -107,8 +110,18 @@ impl std::ops::Index<(usize, &Offset, usize, &Offset)> for Nonintersectionkey {
         &self,
         (shape_ix_a, Offset(xa, ya), shape_ix_b, Offset(xb, yb)): (usize, &Offset, usize, &Offset),
     ) -> &Self::Output {
-        &self.1[shape_ix_a][*xa as usize + (*ya as usize) * self.0][shape_ix_b]
-            [*xb as usize + (*yb as usize) * self.0]
+        &self.nik[shape_ix_a][*xa as usize + (*ya as usize) * self.width][shape_ix_b]
+            [*xb as usize + (*yb as usize) * self.width]
+    }
+}
+impl Nonintersectionkey {
+    // TODO: Can (should) you rewrite the bounds-check into something else?
+    fn abuse_this_datastructure_for_in_bounds_check(
+        &self,
+        shape_ix: usize,
+        Offset(xa, ya): &Offset,
+    ) -> bool {
+        !self.nik[shape_ix][*xa as usize + (*ya as usize) * self.width].is_empty()
     }
 }
 
@@ -193,7 +206,76 @@ fn build_nonintersectionkey(
         nikvec.push(nik_a);
     }
     nikvec.shrink_to_fit();
-    Nonintersectionkey(width as usize + 2, nikvec)
+    Nonintersectionkey {
+        width: width as usize + 2,
+        nik: nikvec,
+    }
+}
+
+// TODO: I have no idea if `&dyn Fn(Offset) -> bool` is the right signature as I didn't learn about `&dyn` yet
+fn dfs_general(initial_offset: Offset, is_legal: &dyn Fn(&Offset) -> bool) -> Vec<Offset> {
+    let mut legal_offsets: Vec<Offset> = Vec::new();
+    let mut seen_offsets: BTreeSet<Offset> = BTreeSet::new(); // TODO: Different data structures?
+    seen_offsets.insert(initial_offset.clone());
+
+    // To eliminate backtracking:
+    enum CameFrom {
+        Up,
+        Down,
+        Left,
+        Right,
+    }
+
+    let mut stack: Vec<(Offset, CameFrom)> = Vec::new();
+
+    // Initial setup:
+    for (new_offset, new_dir) in [
+        (initial_offset.up(), CameFrom::Up),
+        (initial_offset.down(), CameFrom::Down),
+        (initial_offset.left(), CameFrom::Left),
+        (initial_offset.right(), CameFrom::Right),
+    ] {
+        // No need to check if seen_offsets contains them, as we know it won't
+        if is_legal(&new_offset) {
+            seen_offsets.insert(new_offset.clone());
+            legal_offsets.push(new_offset.clone());
+            stack.push((new_offset, new_dir));
+        }
+    }
+
+    while let Some((offset, dir)) = stack.pop() {
+        for (new_offset, new_dir) in match dir {
+            CameFrom::Up => [
+                (offset.up(), CameFrom::Up),
+                (offset.left(), CameFrom::Left),
+                (offset.right(), CameFrom::Right),
+            ],
+            CameFrom::Down => [
+                (offset.down(), CameFrom::Down),
+                (offset.left(), CameFrom::Left),
+                (offset.right(), CameFrom::Right),
+            ],
+            CameFrom::Left => [
+                (offset.up(), CameFrom::Up),
+                (offset.down(), CameFrom::Down),
+                (offset.left(), CameFrom::Left),
+            ],
+            CameFrom::Right => [
+                (offset.up(), CameFrom::Up),
+                (offset.down(), CameFrom::Down),
+                (offset.right(), CameFrom::Right),
+            ],
+        } {
+            // TODO: Can we check seen_offsets membership without cloning?
+            // TODO: Which of these checks is faster? And shouldn't we be using pathfinding::directed::dfs::dfs instead?
+            if is_legal(&new_offset) && seen_offsets.insert(new_offset.clone()) {
+                legal_offsets.push(new_offset.clone());
+                stack.push((new_offset, new_dir));
+            }
+        }
+    }
+
+    legal_offsets
 }
 
 fn get_neighboring_blockstates(
@@ -201,79 +283,11 @@ fn get_neighboring_blockstates(
     nonintersectionkey: &Nonintersectionkey,
     goal_shapekey_key: &GoalShapekeyKey,
 ) -> Vec<Blockstate> {
-    // TODO: I have no idea if `&dyn Fn(Offset) -> bool` is the right signature as I didn't learn about `&dyn` yet
-    let dfs_general = |initial_offset: Offset, is_legal: &dyn Fn(&Offset) -> bool| {
-        let mut legal_offsets: Vec<Offset> = Vec::new();
-        let mut seen_offsets: BTreeSet<Offset> = BTreeSet::new(); // TODO: Different data structures?
-        seen_offsets.insert(initial_offset.clone());
-
-        // To eliminate backtracking:
-        enum CameFrom {
-            Up,
-            Down,
-            Left,
-            Right,
-        }
-
-        let mut stack: Vec<(Offset, CameFrom)> = Vec::new();
-
-        // Initial setup:
-        for (new_offset, new_dir) in [
-            (initial_offset.up(), CameFrom::Up),
-            (initial_offset.down(), CameFrom::Down),
-            (initial_offset.left(), CameFrom::Left),
-            (initial_offset.right(), CameFrom::Right),
-        ] {
-            // No need to check if seen_offsets contains them, as we know it won't
-            if is_legal(&new_offset) {
-                seen_offsets.insert(new_offset.clone());
-                legal_offsets.push(new_offset.clone());
-                stack.push((new_offset, new_dir));
-            }
-        }
-
-        while let Some((offset, dir)) = stack.pop() {
-            for (new_offset, new_dir) in match dir {
-                CameFrom::Up => [
-                    (offset.up(), CameFrom::Up),
-                    (offset.left(), CameFrom::Left),
-                    (offset.right(), CameFrom::Right),
-                ],
-                CameFrom::Down => [
-                    (offset.down(), CameFrom::Down),
-                    (offset.left(), CameFrom::Left),
-                    (offset.right(), CameFrom::Right),
-                ],
-                CameFrom::Left => [
-                    (offset.up(), CameFrom::Up),
-                    (offset.down(), CameFrom::Down),
-                    (offset.left(), CameFrom::Left),
-                ],
-                CameFrom::Right => [
-                    (offset.up(), CameFrom::Up),
-                    (offset.down(), CameFrom::Down),
-                    (offset.right(), CameFrom::Right),
-                ],
-            } {
-                // TODO: Can we check seen_offsets membership without cloning?
-                // TODO: Which of these checks is faster? And shouldn't we be using pathfinding::directed::dfs::dfs instead?
-                if is_legal(&new_offset) && seen_offsets.insert(new_offset.clone()) {
-                    legal_offsets.push(new_offset.clone());
-                    stack.push((new_offset, new_dir));
-                }
-            }
-        }
-
-        legal_offsets
-    };
     let dfs_nongoal = |movingshape_ix: usize,
                        moving_offset: Offset,
                        trimmed_movingshape_offsets: &Offsets|
      -> Vec<Offset> {
         let is_legal = |offsety: &Offset| -> bool {
-            // TODO: This function assumes there are other blocks on the field, because
-            // we currently use their nonintersectionkeys to additionally verify that
-            // offsety is in-bounds
             for (shape_ix, shape_offsets) in blockstate.nongoal_offsets.iter().enumerate() {
                 if shape_ix == movingshape_ix {
                     continue;
@@ -757,8 +771,43 @@ fn auxiliaries_to_path(
 ) -> Option<Vec<Blockstate>> {
     // If we have more than one goalblock, an astar heuristic helps speed things up.
     // Otherwise, default to usual bfs
-    if goal_shapekey_key.len() > 1 {
-        pathfinding::directed::astar::astar(
+    match goal_shapekey_key.len() {
+        0 => Some(vec![start_blockstate.clone()]),
+        1 => {
+            // If this goalblock is also the only block in the puzzle, we can't just call
+            // the usual BFS function, as that assumes we have at least two distinct
+            // blocks in the puzzle to do its in-bounds-check.
+            if start_blockstate.nongoal_offsets.is_empty() {
+                if start_blockstate.goal_offsets == *goal_target_offsets {
+                    return Some(vec![start_blockstate.clone()]);
+                }
+                let beginning_offset = start_blockstate.goal_offsets[0].clone();
+                let is_legal = |offset: &Offset| -> bool {
+                    nonintersectionkey.abuse_this_datastructure_for_in_bounds_check(0, offset)
+                };
+                let neighbors = dfs_general(beginning_offset, &is_legal);
+                if neighbors.contains(&goal_target_offsets[0]) {
+                    let mut goal_blockstate = start_blockstate.clone();
+                    goal_blockstate.goal_offsets = goal_target_offsets.clone();
+                    Some(vec![start_blockstate.clone(), goal_blockstate])
+                } else {
+                    None
+                }
+            } else {
+                pathfinding::directed::bfs::bfs(
+                    start_blockstate,
+                    |blockstate| {
+                        get_neighboring_blockstates(
+                            blockstate,
+                            nonintersectionkey,
+                            goal_shapekey_key,
+                        )
+                    },
+                    |blockstate| blockstate.goal_offsets == *goal_target_offsets,
+                )
+            }
+        }
+        _ => pathfinding::directed::astar::astar(
             start_blockstate,
             |blockstate| {
                 // TODO: More performant solution than using into_iter?
@@ -770,15 +819,7 @@ fn auxiliaries_to_path(
             |blockstate| misplaced_goalblocks_heuristic(blockstate, goal_target_offsets),
             |blockstate| blockstate.goal_offsets == *goal_target_offsets,
         )
-        .map(|path| path.0)
-    } else {
-        pathfinding::directed::bfs::bfs(
-            start_blockstate,
-            |blockstate| {
-                get_neighboring_blockstates(blockstate, nonintersectionkey, goal_shapekey_key)
-            },
-            |blockstate| blockstate.goal_offsets == *goal_target_offsets,
-        )
+        .map(|path| path.0),
     }
 }
 
@@ -940,9 +981,127 @@ mod tests {
     }
 
     #[test]
+    fn test_solver_edgecases() {
+        // Puzzle with exactly one block, which is a non-goalblock
+        assert_eq!(
+            solve_puzzle(".a.", "..."),
+            Ok(Some(vec![".a.".to_string()]))
+        );
+        // Puzzle with exactly two blocks, neither of which are goalblocks
+        assert_eq!(
+            solve_puzzle(".ab", "..."),
+            Ok(Some(vec![".ab".to_string()]))
+        );
+        // Feasible puzzle with exactly one block, which is a goal block
+        assert_eq!(
+            solve_puzzle(
+                "
+                a .....
+                . .   .
+                ... . .
+                    ...
+            ",
+                "
+                . .....
+                . .   .
+                ... a .
+                    ...
+            "
+            ),
+            Ok(Some(vec![
+                "a .....
+. .   .
+... . .
+    ..."
+                .to_string(),
+                ". .....
+. .   .
+... a .
+    ..."
+                .to_string()
+            ]))
+        );
+        // Infeasible puzzle with exactly one block, which is a goal block
+        assert_eq!(solve_puzzle("a .", ". a"), Ok(None));
+        // Trivial puzzle with exactly one block, which is a goal block
+        assert_eq!(solve_puzzle("a.", "a."), Ok(Some(vec!["a.".to_string()])));
+        // Trivial puzzle with exactly two blocks, both being goalblocks
+        assert_eq!(
+            solve_puzzle("a.b", "a.b"),
+            Ok(Some(vec!["a.b".to_string()]))
+        );
+        // Trivial puzzle with exactly two blocks, exactly one of which being goalblocks
+        assert_eq!(
+            solve_puzzle("a.b", "a.."),
+            Ok(Some(vec!["a.b".to_string()]))
+        );
+        // Puzzle without any blocks
+        assert_eq!(
+            solve_puzzle("...", "..."),
+            Ok(Some(vec!["...".to_string()]))
+        );
+        assert_eq!(
+            solve_puzzle("...", ".."),
+            Err(SolvePuzzleError::MismatchedBounds)
+        );
+        // Impossible puzzle
+        assert_eq!(solve_puzzle("a.b", "..a"), Ok(None));
+        // Simple one-move puzzle
+        assert_eq!(
+            solve_puzzle("a.", ".a"),
+            Ok(Some(vec!["a.".to_string(), ".a".to_string()]))
+        );
+        // Simple one-move puzzle with redundant nongoal-block
+        assert_eq!(
+            solve_puzzle("a. b", ".a ."),
+            Ok(Some(vec!["a. b".to_string(), ".a b".to_string()]))
+        );
+        // Simple one-move puzzle with redundant goal-block
+        assert_eq!(
+            solve_puzzle("a. b", ".a b"),
+            Ok(Some(vec!["a. b".to_string(), ".a b".to_string()]))
+        );
+        // Puzzle with multiple goalblocks
+        assert_eq!(
+            solve_puzzle("a.b.", "..ab"),
+            Ok(Some(vec![
+                "a.b.".to_string(),
+                "a..b".to_string(),
+                "..ab".to_string()
+            ]))
+        );
+        // Puzzle with one goalblock
+        assert_eq!(
+            solve_puzzle(
+                "
+                cb...
+                  a
+            ",
+                "
+                a....
+                  .
+            "
+            ),
+            Ok(Some(vec![
+                "cb...
+  a  "
+                .to_string(),
+                "c...b
+  a  "
+                .to_string(),
+                "...cb
+  a  "
+                .to_string(),
+                "a..cb
+  .  "
+                .to_string()
+            ]))
+        );
+    }
+
+    #[test]
     fn test_examples() {
         for puzzle in examples::ALL_EXAMPLES {
-            println!("{} {}", &puzzle.start, &puzzle.goal);
             assert_eq!(
                 Ok(Some(puzzle.min_moves)),
                 solve_puzzle_minmoves(&puzzle.start, &puzzle.goal)
