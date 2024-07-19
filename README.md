@@ -15,14 +15,11 @@ Written in rust 🦀, the code is in the top-level directory. To accomodate all 
 #### Tighter ASTAR-heuristics
 If you have any better ideas for ASTAR-heuristics (whether in the single-goal-block or multiple-goal-block case), please share them! Two ideas I had:
 1. For every goal-block B, count how many other blocks it has to cross in order to reach its goal.
-2. A relaxation of the first idea: For every goal-block B, imagine a new graph, where the nodes are the positions of B such that B is still in-bounds (but might intersect other blocks), and edges are movements of B by a single unit. Put costs on these nodes: If B is in a specific position, the cost of that node is:
-
-  [For all other blocks B' that intersect B in that position, sum C(B')],
-
-  where C(B') is a constant (that depends on the shape of B') such that the resulting heuristic is admissible. If you assume both B and B' to be connected (as subgraphs of ℤ²), I think you can choose C(B') as the diameter of B⨭B' (as a subgraph of ℤ²), where B⨭B' is the union of all (B+x) with (B+x)∩B'≠∅ and x∈ℤ². I'm sorry for writing this so horribly, and haven't proven this as admissible.
-
+2. A relaxation of the first idea: For every goal-block B, imagine a new graph, where the nodes are the positions of B such that B is still in-bounds (but might intersect other blocks), and edges are movements of B by a single unit. Put costs on these nodes: If B is in a specific position, the cost of that node is:\
+  \[For all other blocks B' that intersect B in that position, sum C(B')\],\
+  where C(B') is a constant (that depends on the shape of B') such that the resulting heuristic is admissible. If you assume both B and B' to be connected (as subgraphs of ℤ²), I think you can choose C(B') as the diameter of B⨭B' (as a subgraph of ℤ²), where B⨭B' is the union of all (B+x) with (B+x)∩B'≠∅ and x∈ℤ². I'm sorry for writing this so horribly, and haven't proven this as admissible.\
   With these costs, find the shortest weighted path from the current offset of B to its goal-position, e.g. using Dijkstra. After doing this for all goal-blocks B, take the minimum over all the values.
 
-Both these ideas are implemented in the `astar`-branch, but not used, because these heuristics turned out to be too slow to be practical. I'm also way less certain that they work correctly.
+Both of these ideas are implemented in the `astar`-branch, but not used, because these heuristics turned out to be too slow to be practical. I'm also way less certain that they work correctly.
 
 <!-- TODO: Build-instructions -->
