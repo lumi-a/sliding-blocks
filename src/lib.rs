@@ -213,7 +213,7 @@ fn build_nonintersectionkey(
 }
 
 // TODO: I have no idea if `&dyn Fn(Offset) -> bool` is the right signature as I didn't learn about `&dyn` yet
-fn dfs_general(initial_offset: Offset, is_legal: &dyn Fn(&Offset) -> bool) -> Vec<Offset> {
+fn dfs_general(initial_offset: &Offset, is_legal: &dyn Fn(&Offset) -> bool) -> Vec<Offset> {
     let mut legal_offsets: Vec<Offset> = Vec::new();
     let mut seen_offsets: BTreeSet<Offset> = BTreeSet::new(); // TODO: Different data structures?
     seen_offsets.insert(initial_offset.clone());
@@ -284,7 +284,7 @@ fn get_neighboring_blockstates(
     goal_shapekey_key: &GoalShapekeyKey,
 ) -> Vec<Blockstate> {
     let dfs_nongoal = |movingshape_ix: usize,
-                       moving_offset: Offset,
+                       moving_offset: &Offset,
                        trimmed_movingshape_offsets: &Offsets|
      -> Vec<Offset> {
         let is_legal = |offsety: &Offset| -> bool {
@@ -313,10 +313,10 @@ fn get_neighboring_blockstates(
             }
             true
         };
-        dfs_general(moving_offset, &is_legal)
+        dfs_general(&moving_offset, &is_legal)
     };
 
-    let dfs_goal = |moving_goalvec_ix: usize, moving_offset: Offset| -> Vec<Offset> {
+    let dfs_goal = |moving_goalvec_ix: usize, moving_offset: &Offset| -> Vec<Offset> {
         let moving_shape_ix = goal_shapekey_key[moving_goalvec_ix];
         let is_legal = |offsety: &Offset| -> bool {
             // TODO: This function assumes there are other blocks on the field, because
@@ -342,7 +342,7 @@ fn get_neighboring_blockstates(
             }
             true
         };
-        dfs_general(moving_offset, &is_legal)
+        dfs_general(&moving_offset, &is_legal)
     };
 
     // It's okay to gather all these into a vector rather than a set,
@@ -350,8 +350,7 @@ fn get_neighboring_blockstates(
     let mut neighboring_blockstates: Vec<Blockstate> = Vec::new();
     // Start with blockstate.goal_offsets first, to hopefully find the goal a little sooner
     for (goalvec_ix, offset) in blockstate.goal_offsets.iter().enumerate() {
-        // TODO: avoid .clone() here?
-        for mutated_offset in dfs_goal(goalvec_ix, offset.clone()) {
+        for mutated_offset in dfs_goal(goalvec_ix, &offset) {
             let mut new_blockstate = blockstate.clone();
             new_blockstate.goal_offsets[goalvec_ix] = mutated_offset;
             neighboring_blockstates.push(new_blockstate);
@@ -361,8 +360,7 @@ fn get_neighboring_blockstates(
         for offset in offsets.iter() {
             let mut trimmed_shape_offsets = offsets.clone();
             trimmed_shape_offsets.remove(offset);
-            // TODO: avoid .clone() here?
-            for mutated_offset in dfs_nongoal(shape_ix, offset.clone(), &trimmed_shape_offsets) {
+            for mutated_offset in dfs_nongoal(shape_ix, &offset, &trimmed_shape_offsets) {
                 let mut mutated_shape_offsets = trimmed_shape_offsets.clone();
                 mutated_shape_offsets.insert(mutated_offset);
                 let mut new_blockstate = blockstate.clone();
@@ -785,7 +783,7 @@ fn auxiliaries_to_path(
                 let is_legal = |offset: &Offset| -> bool {
                     nonintersectionkey.abuse_this_datastructure_for_in_bounds_check(0, offset)
                 };
-                let neighbors = dfs_general(beginning_offset, &is_legal);
+                let neighbors = dfs_general(&beginning_offset, &is_legal);
                 if neighbors.contains(&goal_target_offsets[0]) {
                     let mut goal_blockstate = start_blockstate.clone();
                     goal_blockstate.goal_offsets = goal_target_offsets.clone();
