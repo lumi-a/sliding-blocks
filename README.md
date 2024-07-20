@@ -3,6 +3,7 @@ A web-app for playing, and rust-crate for solving, sliding-block puzzles like th
 ## Web-App
 [Try it out!](https://lumi-a.github.io/sliding-blocks). Written in TypeScript 🚬, the code is in the `www`-directory. You can also specify your own puzzles to play around with and have them be solved automatically using the shortest possible number of moves! This uses the rust-crate compiled to web-assembly.
 
+<!-- TODO: Add example images -->
 <!-- TODO: "Document" puzzle-syntax -->
 
 ## Solver
