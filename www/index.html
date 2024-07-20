@@ -22,23 +22,38 @@
     </div>
   </header>
   <dialog id="change-puzzle-dialog">
-    <select id="puzzle-selection"></select>
-    <div id="puzzle-textarea-start-div">
-      <label for="puzzle-textarea-start">Start:</label><br>
-      <textarea id="puzzle-textarea-start" rows="10" cols="16" name="puzzle-textarea-start" spellcheck="false"
-        wrap="off" class="puzzle-string"></textarea>
-    </div>
-    <div id="puzzle-textarea-goal-div">
-      <label for="puzzle-textarea-goal">Goal:</label><br>
-      <textarea id="puzzle-textarea-goal" rows="10" cols="16" name="puzzle-textarea-goal" spellcheck="false" wrap="off"
-        class="puzzle-string"></textarea>
-    </div>
-    <div id="puzzle-dialog-buttons">
-      <button id="puzzle-submit-btn">✅ Play</button>
-      <button id="puzzle-solve-btn">🤖 Compute Solution</button>
+    <div id="computation-animation" class="invisible">
+      <div
+        style="animation-delay: -0s; background: oklch(0.75 0.2 0); border: min(0.78125vw, 0.78125vh) solid oklch(0.25 0.2 0);"
+        class="animation-block"></div>
+      <div
+        style="animation-delay: -1.333s; background: oklch(0.75 0.2 120); border: min(0.78125vw, 0.78125vh) solid oklch(0.25 0.2 120);"
+        class="animation-block"></div>
+      <div
+        style="animation-delay: -2.666s; background: oklch(0.75 0.2 240); border: min(0.78125vw, 0.78125vh) solid oklch(0.25 0.2 240);"
+        class="animation-block"></div>
     </div>
 
-    <span id="error-msg"></span>
+    <div id="change-puzzle-dialog-container">
+      <select id="puzzle-selection"></select>
+      <div id="puzzle-textarea-start-div">
+        <label for="puzzle-textarea-start">Start:</label><br>
+        <textarea id="puzzle-textarea-start" rows="10" cols="16" name="puzzle-textarea-start" spellcheck="false"
+          wrap="off" class="puzzle-string"></textarea>
+      </div>
+      <div id="puzzle-textarea-goal-div">
+        <label for="puzzle-textarea-goal">Goal:</label><br>
+        <textarea id="puzzle-textarea-goal" rows="10" cols="16" name="puzzle-textarea-goal" spellcheck="false"
+          wrap="off" class="puzzle-string"></textarea>
+      </div>
+      <div id="puzzle-dialog-buttons">
+        <button id="puzzle-submit-btn">✅ Play</button>
+        <button id="puzzle-solve-btn">🤖 Compute Solution</button>
+      </div>
+
+      <span id="error-msg"></span>
+    </div>
+
   </dialog>
 
   <div id="svg-puzzle-container"></div>

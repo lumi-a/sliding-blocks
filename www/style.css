@@ -32,6 +32,62 @@ header {
     align-items: center;
 }
 
+#computation-animation {
+    height: 100%;
+    width: 100%;
+    background: #888;
+    opacity: 50%;
+    position: absolute;
+    top: 0;
+    left: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: opacity 0.125s;
+    z-index: 10;
+}
+
+#computation-animation.invisible {
+    display: none;
+    opacity: 0;
+}
+
+#computation-animation>div.animation-block {
+    animation: animation-block;
+    animation-duration: 4s;
+    animation-iteration-count: infinite;
+    width: min(12.5vw, 12.5vh);
+    height: min(12.5vw, 12.5vh);
+    border-radius: min(1.5625vw, 1.5625vh);
+    position: absolute;
+}
+
+@keyframes animation-block {
+    0% {
+        translate: -50% -50%;
+    }
+
+    10%,
+    25% {
+        translate: 50% -50%;
+    }
+
+    35%,
+    50% {
+        translate: 50% 50%;
+    }
+
+    60%,
+    75% {
+        translate: -50% 50%;
+    }
+
+    85%,
+    100% {
+        translate: -50% -50%;
+    }
+}
+
 #svg-puzzle-container,
 #svg-puzzle {
     height: 100%;
@@ -53,13 +109,16 @@ header {
     stroke-opacity: 0.5;
 }
 
-#change-puzzle-dialog[open] {
+#change-puzzle-dialog {
+    border-radius: 0.5em;
+}
+
+#change-puzzle-dialog-container {
     display: flex;
     flex-direction: column;
     gap: 1em;
     width: 20em;
     align-items: center;
-    border-radius: 0.5em;
 }
 
 #puzzle-dialog-buttons {

@@ -609,6 +609,7 @@ const move_counter_elem = document.getElementById("move-counter") as HTMLSpanEle
 const history_forward_btn = document.getElementById("history-forward") as HTMLButtonElement
 const history_backward_btn = document.getElementById("history-backward") as HTMLButtonElement
 const error_msg_span = document.getElementById("error-msg") as HTMLSpanElement
+const computation_animation = document.getElementById("computation-animation")
 change_puzzle_btn.addEventListener("click", () => {
     puzzle_textarea_goal.value = current_puzzle.goal_string
     puzzle_textarea_start.value = current_puzzle.start_string
@@ -639,24 +640,28 @@ puzzle_solve_btn.addEventListener("click", e => {
     const start_string = puzzle_textarea_start.value
     const goal_string = puzzle_textarea_goal.value
     let solution
-    try {
-        solution = solve_puzzle(start_string, goal_string)
-        if (solution === undefined) {
-            error_msg_span.textContent = "No solution exists."
-        } else {
-            const solution_blockstates = solution.map(s => Blockstate.blockstate_from_string(s))
-            change_puzzle_dialog.close()
-            current_puzzle = new Puzzle(start_string, goal_string)
-            current_puzzle.initialise(svg_puzzle)
-            for (let blockstate of solution_blockstates.slice(1)) {
-                current_puzzle.add_to_history(blockstate)
+    computation_animation.classList.remove("invisible")
+    setTimeout(() => {
+        try {
+            solution = solve_puzzle(start_string, goal_string)
+            if (solution === undefined) {
+                error_msg_span.textContent = "No solution exists."
+            } else {
+                const solution_blockstates = solution.map(s => Blockstate.blockstate_from_string(s))
+                change_puzzle_dialog.close()
+                current_puzzle = new Puzzle(start_string, goal_string)
+                current_puzzle.initialise(svg_puzzle)
+                for (let blockstate of solution_blockstates.slice(1)) {
+                    current_puzzle.add_to_history(blockstate)
+                }
+                current_puzzle.history_ix = 0
+                current_puzzle.update_blockstate_from_history()
             }
-            current_puzzle.history_ix = 0
-            current_puzzle.update_blockstate_from_history()
+        } catch (e) {
+            error_msg_span.textContent = e.toString()
         }
-    } catch (e) {
-        error_msg_span.textContent = e.toString()
-    }
+        computation_animation.classList.add("invisible")
+    }, 10) // Sigh, otherwise the animation doesn't show
 })
 
 const puzzle_selection = document.getElementById("puzzle-selection") as HTMLSelectElement
