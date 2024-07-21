@@ -614,8 +614,8 @@ enum PreprocessingOutput {
 }
 
 fn preprocess_proper_puzzle(
-    start_chartopoints: CharToPoints,
-    goal_chartopoints: CharToPoints,
+    start_chartopoints: &CharToPoints,
+    goal_chartopoints: &CharToPoints,
     width: Width,
     height: Height,
 ) -> Result<PreprocessingOutput, SolvePuzzleError> {
@@ -868,7 +868,7 @@ fn preprocessing(start: &str, goal: &str) -> Result<PreprocessingOutput, SolvePu
         (
             StringToCharToPointsResult::ProperPuzzle(start_chartopoints, width, height),
             StringToCharToPointsResult::ProperPuzzle(goal_chartopoints, _goal_width, _goal_height),
-        ) => preprocess_proper_puzzle(start_chartopoints, goal_chartopoints, width, height),
+        ) => preprocess_proper_puzzle(&start_chartopoints, &goal_chartopoints, width, height),
         _ => Err(SolvePuzzleError::MismatchedBounds),
     }
 }
