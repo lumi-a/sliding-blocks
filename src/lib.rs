@@ -613,6 +613,189 @@ enum PreprocessingOutput {
     ProperPuzzle(Auxiliaries),
 }
 
+fn preprocess_proper_puzzle(
+    start_chartopoints: CharToPoints,
+    goal_chartopoints: CharToPoints,
+    width: Width,
+    height: Height,
+) -> Result<PreprocessingOutput, SolvePuzzleError> {
+    // Assumes that bounds exist in CharToPoints.
+
+    // Check that bounds match.
+    let start_bounds = &start_chartopoints[&BOUNDS_CHAR];
+    let goal_bounds = &goal_chartopoints[&BOUNDS_CHAR];
+    if start_bounds != goal_bounds {
+        return Err(SolvePuzzleError::MismatchedBounds);
+    }
+
+    let bounds: Shape = start_chartopoints[&BOUNDS_CHAR].clone();
+
+    let mut char_to_shape: HashMap<char, Shape> = HashMap::new();
+    let mut shape_to_chars_and_offsets: HashMap<Shape, Vec<(char, Offset)>> = HashMap::new();
+    let mut reconstruction_map: ReconstructionMap = ReconstructionMap::new();
+    let mut goal_chars_startoffset_targetoffset: Vec<(char, Offset, Offset)> = Vec::new();
+    for (c, start_points) in start_chartopoints.iter() {
+        if c == &BOUNDS_CHAR {
+            continue;
+        }
+
+        let (shape_min, _) = get_extremes(start_points);
+        let shape: Shape = start_points
+            .iter()
+            .map(|point| point.sub(&shape_min))
+            .collect();
+
+        // This is only used to map goal-shapes to their indices in shapekey later
+        char_to_shape.insert(*c, shape.clone());
+
+        shape_to_chars_and_offsets
+            .entry(shape.clone())
+            .or_default()
+            .push((*c, (&shape_min).into()));
+        reconstruction_map.insert((shape, (&shape_min).into()), *c);
+
+        if let Some(goal_points) = goal_chartopoints.get(c) {
+            let (target_min, _) = get_extremes(goal_points);
+            goal_chars_startoffset_targetoffset.push((
+                *c,
+                (&shape_min).into(),
+                (&target_min).into(),
+            ));
+        }
+    }
+    let mut char_to_goalshape: HashMap<char, Shape> = HashMap::new();
+    for (c, goal_points) in goal_chartopoints.iter() {
+        // We already know the bounds match, so we don't need to care about those
+        if c == &BOUNDS_CHAR {
+            continue;
+        }
+        let (shape_min, _) = get_extremes(goal_points);
+        let shape: Shape = goal_points
+            .iter()
+            .map(|point| point.sub(&shape_min))
+            .collect();
+        char_to_goalshape.insert(*c, shape.clone());
+    }
+    // Check that the start and goal shapes are the same
+    for (c, goalshape) in char_to_goalshape.iter() {
+        let startshape = char_to_shape
+            .get(c)
+            .ok_or(SolvePuzzleError::GoalblockWithoutStartingblock(*c))?;
+        if startshape != goalshape {
+            return Err(SolvePuzzleError::MismatchedGoalShapes(*c));
+        }
+    }
+
+    let mut raw_shapekey: Vec<(Shape, Vec<(char, Offset)>)> = shape_to_chars_and_offsets
+        .iter()
+        .map(|(shape, chars_and_offsets)| (shape.clone(), chars_and_offsets.clone()))
+        .collect();
+
+    raw_shapekey.sort_unstable_by(
+        |(a_shape, a_chars_and_offsets), (b_shape, b_chars_and_offsets)| {
+            let a_shape_only_for_goals = a_chars_and_offsets
+                .iter()
+                .all(|(c, _)| goal_chartopoints.contains_key(c));
+            let b_shape_only_for_goals = b_chars_and_offsets
+                .iter()
+                .all(|(c, _)| goal_chartopoints.contains_key(c));
+
+            // Sort shapes that are only for goals last
+            if a_shape_only_for_goals && !b_shape_only_for_goals {
+                Ordering::Greater
+            } else if !a_shape_only_for_goals && b_shape_only_for_goals {
+                Ordering::Less
+            } else {
+                // If both or neither are only for goals, sort by size firste idea
+                // being: If shapes are larger, we find intersections earlier
+                let a_size = a_shape.len();
+                let b_size = b_shape.len();
+                if a_size == b_size {
+                    // And if sizes equal, just compare the shapes as sets
+                    a_shape.cmp(b_shape)
+                } else {
+                    b_size.cmp(&a_size)
+                }
+            }
+        },
+    );
+
+    let mut shapekey: Shapekey = raw_shapekey
+        .iter()
+        .map(|(shape, _)| shape.clone())
+        .collect();
+    shapekey.shrink_to_fit();
+
+    // Sort goal-blocks by size, too.
+    // This almost never matters, because most puzzles have at most one
+    // goal-block anyway, and those that don't often have goal-blocks of
+    // the same size.
+    goal_chars_startoffset_targetoffset.sort_unstable_by(|(ca, _, _), (cb, _, _)| {
+        let a_size = char_to_shape[ca].len();
+        let b_size = char_to_shape[cb].len();
+        if a_size == b_size {
+            ca.cmp(cb)
+        } else {
+            b_size.cmp(&a_size)
+        }
+    });
+
+    // For all goal-blocks, now look up which index their shape in shapekey corresponds to
+    let mut goal_shapekey_key: GoalShapekeyKey = goal_chars_startoffset_targetoffset
+        .iter()
+        .map(|(c, _, _)| {
+            raw_shapekey
+                .iter()
+                .position(|(shape, _)| *shape == char_to_shape[c])
+                .unwrap()
+        })
+        .collect();
+    goal_shapekey_key.shrink_to_fit();
+
+    let mut nongoal_offsets = raw_shapekey
+        .iter()
+        .map(|(_, chars_and_offsets)| {
+            chars_and_offsets
+                .iter()
+                .filter(|(c, _)| !goal_chartopoints.contains_key(c))
+                .map(|(_, offset)| offset.clone())
+                .collect()
+        })
+        .filter(|offsets: &Offsets| !offsets.is_empty())
+        .collect_vec();
+    nongoal_offsets.shrink_to_fit();
+
+    let mut goal_offsets = goal_chars_startoffset_targetoffset
+        .iter()
+        .map(|(_, start, _)| start.clone())
+        .collect_vec();
+    goal_offsets.shrink_to_fit();
+
+    let blockstate: Blockstate = Blockstate {
+        nongoal_offsets,
+        goal_offsets,
+    };
+    let mut goal_target_offsets = goal_chars_startoffset_targetoffset
+        .iter()
+        .map(|(_, _, target)| target.clone())
+        .collect_vec();
+    goal_target_offsets.shrink_to_fit();
+
+    let nonintersectionkey = build_nonintersectionkey(&bounds, &shapekey, width, height);
+
+    Ok(PreprocessingOutput::ProperPuzzle(Auxiliaries {
+        bounds,
+        shapekey,
+        start_blockstate: blockstate,
+        nonintersectionkey,
+        goal_shapekey_key,
+        goal_target_offsets,
+        reconstruction_map,
+        width,
+        height,
+    }))
+}
+
 fn preprocessing(start: &str, goal: &str) -> Result<PreprocessingOutput, SolvePuzzleError> {
     // TODO: This code is awful, and awfully named.
     enum StringToCharToPointsResult {
@@ -675,188 +858,6 @@ fn preprocessing(start: &str, goal: &str) -> Result<PreprocessingOutput, SolvePu
         ))
     }
 
-    fn process_proper_puzzle(
-        start_chartopoints: CharToPoints,
-        goal_chartopoints: CharToPoints,
-        width: Width,
-        height: Height,
-    ) -> Result<PreprocessingOutput, SolvePuzzleError> {
-        // Check that bounds match.
-        // We already know that neither are empty, so we can unwrap safely here.
-        let start_bounds = &start_chartopoints[&BOUNDS_CHAR];
-        let goal_bounds = &goal_chartopoints[&BOUNDS_CHAR];
-        if start_bounds != goal_bounds {
-            return Err(SolvePuzzleError::MismatchedBounds);
-        }
-
-        let bounds: Shape = start_chartopoints[&BOUNDS_CHAR].clone();
-
-        let mut char_to_shape: HashMap<char, Shape> = HashMap::new();
-        let mut shape_to_chars_and_offsets: HashMap<Shape, Vec<(char, Offset)>> = HashMap::new();
-        let mut reconstruction_map: ReconstructionMap = ReconstructionMap::new();
-        let mut goal_chars_startoffset_targetoffset: Vec<(char, Offset, Offset)> = Vec::new();
-        for (c, start_points) in start_chartopoints.iter() {
-            if c == &BOUNDS_CHAR {
-                continue;
-            }
-
-            let (shape_min, _) = get_extremes(start_points);
-            let shape: Shape = start_points
-                .iter()
-                .map(|point| point.sub(&shape_min))
-                .collect();
-
-            // This is only used to map goal-shapes to their indices in shapekey later
-            char_to_shape.insert(*c, shape.clone());
-
-            shape_to_chars_and_offsets
-                .entry(shape.clone())
-                .or_default()
-                .push((*c, (&shape_min).into()));
-            reconstruction_map.insert((shape, (&shape_min).into()), *c);
-
-            if let Some(goal_points) = goal_chartopoints.get(c) {
-                let (target_min, _) = get_extremes(goal_points);
-                goal_chars_startoffset_targetoffset.push((
-                    *c,
-                    (&shape_min).into(),
-                    (&target_min).into(),
-                ));
-            }
-        }
-        let mut char_to_goalshape: HashMap<char, Shape> = HashMap::new();
-        for (c, goal_points) in goal_chartopoints.iter() {
-            // We already know the bounds match, so we don't need to care about those
-            if c == &BOUNDS_CHAR {
-                continue;
-            }
-            let (shape_min, _) = get_extremes(goal_points);
-            let shape: Shape = goal_points
-                .iter()
-                .map(|point| point.sub(&shape_min))
-                .collect();
-            char_to_goalshape.insert(*c, shape.clone());
-        }
-        // Check that the start and goal shapes are the same
-        for (c, goalshape) in char_to_goalshape.iter() {
-            let startshape = char_to_shape
-                .get(c)
-                .ok_or(SolvePuzzleError::GoalblockWithoutStartingblock(*c))?;
-            if startshape != goalshape {
-                return Err(SolvePuzzleError::MismatchedGoalShapes(*c));
-            }
-        }
-
-        let mut raw_shapekey: Vec<(Shape, Vec<(char, Offset)>)> = shape_to_chars_and_offsets
-            .iter()
-            .map(|(shape, chars_and_offsets)| (shape.clone(), chars_and_offsets.clone()))
-            .collect();
-
-        raw_shapekey.sort_unstable_by(
-            |(a_shape, a_chars_and_offsets), (b_shape, b_chars_and_offsets)| {
-                let a_shape_only_for_goals = a_chars_and_offsets
-                    .iter()
-                    .all(|(c, _)| goal_chartopoints.contains_key(c));
-                let b_shape_only_for_goals = b_chars_and_offsets
-                    .iter()
-                    .all(|(c, _)| goal_chartopoints.contains_key(c));
-
-                // Sort shapes that are only for goals last
-                if a_shape_only_for_goals && !b_shape_only_for_goals {
-                    Ordering::Greater
-                } else if !a_shape_only_for_goals && b_shape_only_for_goals {
-                    Ordering::Less
-                } else {
-                    // If both or neither are only for goals, sort by size firste idea
-                    // being: If shapes are larger, we find intersections earlier
-                    let a_size = a_shape.len();
-                    let b_size = b_shape.len();
-                    if a_size == b_size {
-                        // And if sizes equal, just compare the shapes as sets
-                        a_shape.cmp(b_shape)
-                    } else {
-                        b_size.cmp(&a_size)
-                    }
-                }
-            },
-        );
-
-        let mut shapekey: Shapekey = raw_shapekey
-            .iter()
-            .map(|(shape, _)| shape.clone())
-            .collect();
-        shapekey.shrink_to_fit();
-
-        // Sort goal-blocks by size, too.
-        // This almost never matters, because most puzzles have at most one
-        // goal-block anyway, and those that don't often have goal-blocks of
-        // the same size.
-        goal_chars_startoffset_targetoffset.sort_unstable_by(|(ca, _, _), (cb, _, _)| {
-            let a_size = char_to_shape[ca].len();
-            let b_size = char_to_shape[cb].len();
-            if a_size == b_size {
-                ca.cmp(cb)
-            } else {
-                b_size.cmp(&a_size)
-            }
-        });
-
-        // For all goal-blocks, now look up which index their shape in shapekey corresponds to
-        let mut goal_shapekey_key: GoalShapekeyKey = goal_chars_startoffset_targetoffset
-            .iter()
-            .map(|(c, _, _)| {
-                raw_shapekey
-                    .iter()
-                    .position(|(shape, _)| *shape == char_to_shape[c])
-                    .unwrap()
-            })
-            .collect();
-        goal_shapekey_key.shrink_to_fit();
-
-        let mut nongoal_offsets = raw_shapekey
-            .iter()
-            .map(|(_, chars_and_offsets)| {
-                chars_and_offsets
-                    .iter()
-                    .filter(|(c, _)| !goal_chartopoints.contains_key(c))
-                    .map(|(_, offset)| offset.clone())
-                    .collect()
-            })
-            .filter(|offsets: &Offsets| !offsets.is_empty())
-            .collect_vec();
-        nongoal_offsets.shrink_to_fit();
-
-        let mut goal_offsets = goal_chars_startoffset_targetoffset
-            .iter()
-            .map(|(_, start, _)| start.clone())
-            .collect_vec();
-        goal_offsets.shrink_to_fit();
-
-        let blockstate: Blockstate = Blockstate {
-            nongoal_offsets,
-            goal_offsets,
-        };
-        let mut goal_target_offsets = goal_chars_startoffset_targetoffset
-            .iter()
-            .map(|(_, _, target)| target.clone())
-            .collect_vec();
-        goal_target_offsets.shrink_to_fit();
-
-        let nonintersectionkey = build_nonintersectionkey(&bounds, &shapekey, width, height);
-
-        Ok(PreprocessingOutput::ProperPuzzle(Auxiliaries {
-            bounds,
-            shapekey,
-            start_blockstate: blockstate,
-            nonintersectionkey,
-            goal_shapekey_key,
-            goal_target_offsets,
-            reconstruction_map,
-            width,
-            height,
-        }))
-    }
-
     let start_stc_result = string_to_chartopoints(start)?;
     let goal_stc_result = string_to_chartopoints(goal)?;
 
@@ -867,7 +868,7 @@ fn preprocessing(start: &str, goal: &str) -> Result<PreprocessingOutput, SolvePu
         (
             StringToCharToPointsResult::ProperPuzzle(start_chartopoints, width, height),
             StringToCharToPointsResult::ProperPuzzle(goal_chartopoints, _goal_width, _goal_height),
-        ) => process_proper_puzzle(start_chartopoints, goal_chartopoints, width, height),
+        ) => preprocess_proper_puzzle(start_chartopoints, goal_chartopoints, width, height),
         _ => Err(SolvePuzzleError::MismatchedBounds),
     }
 }
@@ -892,7 +893,7 @@ fn misplaced_goalblocks_heuristic(
         .count()
 }
 
-fn auxiliaries_to_path(
+fn solution_from_auxiliaries(
     Auxiliaries {
         start_blockstate,
         nonintersectionkey,
@@ -979,7 +980,9 @@ fn auxiliaries_to_path(
 
 fn solve_puzzle_path(start: &str, goal: &str) -> Result<Option<Vec<Blockstate>>, SolvePuzzleError> {
     match preprocessing(start, goal)? {
-        PreprocessingOutput::ProperPuzzle(auxiliaries) => Ok(auxiliaries_to_path(&auxiliaries)),
+        PreprocessingOutput::ProperPuzzle(auxiliaries) => {
+            Ok(solution_from_auxiliaries(&auxiliaries))
+        }
         PreprocessingOutput::EmptyPuzzle => Err(SolvePuzzleError::EmptyPuzzle),
     }
 }
@@ -994,7 +997,7 @@ pub fn solve_puzzle(start: &str, goal: &str) -> Result<Option<Vec<String>>, Solv
     match preprocessing(start, goal)? {
         PreprocessingOutput::EmptyPuzzle => Err(SolvePuzzleError::EmptyPuzzle),
         PreprocessingOutput::ProperPuzzle(auxiliaries) => {
-            Ok(auxiliaries_to_path(&auxiliaries).map(|path| {
+            Ok(solution_from_auxiliaries(&auxiliaries).map(|path| {
                 let width = auxiliaries.width;
                 let height = auxiliaries.height;
                 let bounds = auxiliaries.bounds;
