@@ -19,3 +19,6 @@ criterion = "0.3"
 [[bench]]
 name = "example"
 harness = false
+
+[profile.test]
+inherits = "release"
