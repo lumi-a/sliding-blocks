@@ -2,7 +2,6 @@ pub mod examples;
 
 use bitvec::prelude::*;
 use itertools::Itertools;
-use rayon::prelude::*;
 use std::cmp::{max, min, Ordering};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use wasm_bindgen::prelude::*;
