@@ -3,7 +3,7 @@ pub mod examples;
 use bitvec::prelude::*;
 use itertools::Itertools;
 use std::cmp::{max, min, Ordering};
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use wasm_bindgen::prelude::*;
 
 type Coor = u8;
@@ -48,7 +48,7 @@ impl From<&Offset> for Point {
 }
 
 type Points = BTreeSet<Point>;
-type CharToPoints = HashMap<char, Points>;
+type CharToPoints = BTreeMap<char, Points>;
 type ReconstructionMap = HashMap<(Shape, Offset), char>;
 
 type Shape = BTreeSet<Point>; // nonempty. min-x == 0, min-y == 0
