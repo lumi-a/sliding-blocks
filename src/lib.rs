@@ -24,6 +24,22 @@ impl Point {
     fn sub(&self, other: &Point) -> Point {
         Point(self.0 - other.0, self.1 - other.1)
     }
+    #[inline]
+    fn up(&self) -> Self {
+        Self(self.0, self.1 + 1)
+    }
+    #[inline]
+    fn down(&self) -> Self {
+        Self(self.0, self.1 - 1)
+    }
+    #[inline]
+    fn left(&self) -> Self {
+        Self(self.0 - 1, self.1)
+    }
+    #[inline]
+    fn right(&self) -> Self {
+        Self(self.0 + 1, self.1)
+    }
 }
 impl From<&Offset> for Point {
     fn from(offset: &Offset) -> Self {
@@ -46,8 +62,8 @@ fn get_extremes(coordinates_set: &Points) -> (Point, Point) {
     let mut max_x = Coor::MIN;
     let mut max_y = Coor::MIN;
     for point in coordinates_set {
-        max_x = min(max_x, point.0);
-        max_y = min(max_y, point.1);
+        max_x = max(max_x, point.0);
+        max_y = max(max_y, point.1);
         min_x = min(min_x, point.0);
         min_y = min(min_y, point.1);
     }
@@ -59,20 +75,20 @@ type Bounds = Shape; // min-x == 1, min-y == 1.
 struct Offset(Coor, Coor); // Should be >= (1, 1) for most offsets
 impl Offset {
     #[inline]
-    fn up(&self) -> Offset {
-        Offset(self.0, self.1 + 1)
+    fn up(&self) -> Self {
+        Self(self.0, self.1 + 1)
     }
     #[inline]
-    fn down(&self) -> Offset {
-        Offset(self.0, self.1 - 1)
+    fn down(&self) -> Self {
+        Self(self.0, self.1 - 1)
     }
     #[inline]
-    fn left(&self) -> Offset {
-        Offset(self.0 - 1, self.1)
+    fn left(&self) -> Self {
+        Self(self.0 - 1, self.1)
     }
     #[inline]
-    fn right(&self) -> Offset {
-        Offset(self.0 + 1, self.1)
+    fn right(&self) -> Self {
+        Self(self.0 + 1, self.1)
     }
 }
 impl From<&Point> for Offset {
@@ -796,68 +812,68 @@ fn preprocess_proper_puzzle(
     }))
 }
 
-fn preprocessing(start: &str, goal: &str) -> Result<PreprocessingOutput, SolvePuzzleError> {
-    // TODO: This code is awful, and awfully named.
-    enum StringToCharToPointsResult {
-        EmptyPuzzle,
-        ProperPuzzle(CharToPoints, Width, Height),
-    }
-    fn string_to_chartopoints(s: &str) -> Result<StringToCharToPointsResult, SolvePuzzleError> {
-        let mut min_x = usize::MAX;
-        let mut min_y = usize::MAX;
-        let mut max_x = usize::MIN;
-        let mut max_y = usize::MIN;
+// TODO: This code is awful, and awfully named.
+enum StringToCharToPointsResult {
+    EmptyPuzzle,
+    ProperPuzzle(CharToPoints, Width, Height),
+}
+fn string_to_chartopoints(s: &str) -> Result<StringToCharToPointsResult, SolvePuzzleError> {
+    let mut min_x = usize::MAX;
+    let mut min_y = usize::MAX;
+    let mut max_x = usize::MIN;
+    let mut max_y = usize::MIN;
 
-        let mut char_annotated_coordinates: Vec<(char, (usize, usize))> = Vec::new();
+    let mut char_annotated_coordinates: Vec<(char, (usize, usize))> = Vec::new();
 
-        for (y, l) in s.lines().enumerate() {
-            for (x, c) in l.chars().enumerate() {
-                if !c.is_whitespace() {
-                    min_x = min(min_x, x);
-                    min_y = min(min_y, y);
-                    max_x = max(max_x, x);
-                    max_y = max(max_y, y);
-                    char_annotated_coordinates.push((c, (x, y)));
-                    if c != BOUNDS_CHAR {
-                        char_annotated_coordinates.push((BOUNDS_CHAR, (x, y)));
-                    }
+    for (y, l) in s.lines().enumerate() {
+        for (x, c) in l.chars().enumerate() {
+            if !c.is_whitespace() {
+                min_x = min(min_x, x);
+                min_y = min(min_y, y);
+                max_x = max(max_x, x);
+                max_y = max(max_y, y);
+                char_annotated_coordinates.push((c, (x, y)));
+                if c != BOUNDS_CHAR {
+                    char_annotated_coordinates.push((BOUNDS_CHAR, (x, y)));
                 }
             }
         }
-        if char_annotated_coordinates.is_empty() {
-            return Ok(StringToCharToPointsResult::EmptyPuzzle);
-        }
-        let width_usize: usize = max_x + 1 - min_x;
-        let height_usize: usize = max_y + 1 - min_y;
+    }
+    if char_annotated_coordinates.is_empty() {
+        return Ok(StringToCharToPointsResult::EmptyPuzzle);
+    }
+    let width_usize: usize = max_x + 1 - min_x;
+    let height_usize: usize = max_y + 1 - min_y;
 
-        // Try converting to Coor, and otherwise throw SolvePuzzleError::WidthTooLarge
-        let width: Width = width_usize
+    // Try converting to Coor, and otherwise throw SolvePuzzleError::WidthTooLarge
+    let width: Width = width_usize
+        .try_into()
+        .map_err(|_| SolvePuzzleError::WidthTooLarge)?;
+    let height: Height = height_usize
+        .try_into()
+        .map_err(|_| SolvePuzzleError::HeightTooLarge)?;
+
+    let mut char_to_points: CharToPoints = CharToPoints::new();
+    for (c, pair) in char_annotated_coordinates {
+        let (x_usize, y_usize) = (pair.0 + 1 - min_x, pair.1 + 1 - min_y);
+        let x: Coor = x_usize
             .try_into()
             .map_err(|_| SolvePuzzleError::WidthTooLarge)?;
-        let height: Height = height_usize
+        let y: Coor = y_usize
             .try_into()
             .map_err(|_| SolvePuzzleError::HeightTooLarge)?;
-
-        let mut char_to_points: CharToPoints = CharToPoints::new();
-        for (c, pair) in char_annotated_coordinates {
-            let (x_usize, y_usize) = (pair.0 + 1 - min_x, pair.1 + 1 - min_y);
-            let x: Coor = x_usize
-                .try_into()
-                .map_err(|_| SolvePuzzleError::WidthTooLarge)?;
-            let y: Coor = y_usize
-                .try_into()
-                .map_err(|_| SolvePuzzleError::HeightTooLarge)?;
-            let point = Point(x, y);
-            char_to_points.entry(c).or_default().insert(point);
-        }
-
-        Ok(StringToCharToPointsResult::ProperPuzzle(
-            char_to_points,
-            width,
-            height,
-        ))
+        let point = Point(x, y);
+        char_to_points.entry(c).or_default().insert(point);
     }
 
+    Ok(StringToCharToPointsResult::ProperPuzzle(
+        char_to_points,
+        width,
+        height,
+    ))
+}
+
+fn preprocessing(start: &str, goal: &str) -> Result<PreprocessingOutput, SolvePuzzleError> {
     let start_stc_result = string_to_chartopoints(start)?;
     let goal_stc_result = string_to_chartopoints(goal)?;
 
