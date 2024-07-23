@@ -24,22 +24,6 @@ impl Point {
     fn sub(&self, other: &Point) -> Point {
         Point(self.0 - other.0, self.1 - other.1)
     }
-    #[inline]
-    fn up(&self) -> Self {
-        Self(self.0, self.1 + 1)
-    }
-    #[inline]
-    fn down(&self) -> Self {
-        Self(self.0, self.1 - 1)
-    }
-    #[inline]
-    fn left(&self) -> Self {
-        Self(self.0 - 1, self.1)
-    }
-    #[inline]
-    fn right(&self) -> Self {
-        Self(self.0 + 1, self.1)
-    }
 }
 impl From<&Offset> for Point {
     fn from(offset: &Offset) -> Self {
@@ -533,7 +517,7 @@ fn get_neighboring_blockstates(
     neighboring_blockstates
 }
 
-fn print_puzzle(
+fn _print_puzzle(
     bounds: &Bounds,
     shapekey: &Shapekey,
     blockstate: &Blockstate,
