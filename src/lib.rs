@@ -14,7 +14,9 @@ type Height = Coor;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 struct Point(Coor, Coor);
-// A "global" coordinate, in contrast to the Offset of a Shape
+// A "global" coordinate, in contrast to the Offset of a Shape.
+// Over time, these two types diverged a lot, for what I hope (but
+// don't believe) to be good reasons.
 impl Point {
     fn add(&self, other: &Point) -> Point {
         Point(self.0 + other.0, self.1 + other.1)
@@ -204,7 +206,7 @@ fn build_nonintersectionkey(
                 let mut nik_a_xy: ShapevecForNik<BitVec> = ShapevecForNik::new();
 
                 let shift_a = Offset::new(xa, ya);
-                let shifted_a: Points = shift_points(&shape_a, &shift_a);
+                let shifted_a: Points = shift_points(shape_a, &shift_a);
                 if shifted_a.is_subset(bounds) {
                     // Let the fun begin
                     for (shape_ix_b, shape_b) in shapekey.iter().enumerate() {
@@ -220,17 +222,13 @@ fn build_nonintersectionkey(
                                     *relative_nik
                                         .entry((shape_ix_a, shape_ix_b, relative_offset))
                                         .or_insert({
-                                            let shifted_b: Points =
-                                                shift_points(&shape_b, &shift_b);
+                                            let shifted_b: Points = shift_points(shape_b, &shift_b);
                                             shifted_b.is_disjoint(&shifted_a)
                                         })
-                                        && *inbounds
-                                            .entry((shape_ix_b, shift_b.clone()))
-                                            .or_insert({
-                                                let shifted_b: Points =
-                                                    shift_points(&shape_b, &shift_b);
-                                                shifted_b.is_subset(bounds)
-                                            }),
+                                        && *inbounds.entry((shape_ix_b, shift_b)).or_insert({
+                                            let shifted_b: Points = shift_points(shape_b, &shift_b);
+                                            shifted_b.is_subset(bounds)
+                                        }),
                                 );
                             }
                         }
@@ -257,8 +255,8 @@ fn dfs_general(
     is_legal: &dyn Fn(&Offset) -> bool,
 ) -> impl Iterator<Item = Offset> {
     let mut legal_offsets: Vec<Offset> = Vec::new();
-    let mut seen_offsets: FxHashSet<Offset> = Default::default(); // TODO: Different data structures?
-    seen_offsets.insert(initial_offset.clone());
+    let mut seen_offsets: Set64<Offset> = Default::default();
+    seen_offsets.insert(*initial_offset);
 
     // To eliminate backtracking:
     enum CameFrom {
@@ -279,8 +277,8 @@ fn dfs_general(
     ] {
         // No need to check if seen_offsets contains them, as we know it won't
         if is_legal(&new_offset) {
-            seen_offsets.insert(new_offset.clone());
-            legal_offsets.push(new_offset.clone());
+            seen_offsets.insert(new_offset);
+            legal_offsets.push(new_offset);
             stack.push((new_offset, new_dir));
         }
     }
@@ -308,10 +306,8 @@ fn dfs_general(
                 (offset.right(), CameFrom::Right),
             ],
         } {
-            // TODO: Can we check seen_offsets membership without cloning?
-            // TODO: Which of these checks is faster? And shouldn't we be using pathfinding::directed::dfs::dfs instead?
-            if seen_offsets.insert(new_offset.clone()) && is_legal(&new_offset) {
-                legal_offsets.push(new_offset.clone());
+            if is_legal(&new_offset) && seen_offsets.insert(new_offset) {
+                legal_offsets.push(new_offset);
                 stack.push((new_offset, new_dir));
             }
         }
@@ -396,7 +392,7 @@ fn get_neighboring_blockstates(
                 dfs_general(&moving_offset, &is_legal).map(move |mutated_offset| {
                     // TODO: Workhorse outside of closure?
                     let mut mutated_trimmed_offsets = trimmed_movingshape_offsets.clone();
-                    mutated_trimmed_offsets.insert(mutated_offset.clone());
+                    mutated_trimmed_offsets.insert(mutated_offset);
                     let mut new_blockstate = blockstate.clone();
                     new_blockstate.nongoal_offsets[moving_shape_ix] = mutated_trimmed_offsets;
                     let justmoved = Justmoved::Nongoal(moving_shape_ix, mutated_offset);
@@ -437,7 +433,7 @@ fn get_neighboring_blockstates(
                 true
             };
             let justmoved = Justmoved::Goal(moving_goalvec_ix);
-            dfs_general(&moving_offset, &is_legal).map(move |mutated_offset| {
+            dfs_general(moving_offset, &is_legal).map(move |mutated_offset| {
                 let mut new_blockstate = blockstate.clone();
                 new_blockstate.goal_offsets[moving_goalvec_ix] = mutated_offset;
                 BlockstateJustmoved {
@@ -481,9 +477,9 @@ fn get_neighboring_blockstates(
                             })
                             .map(move |offset| (shape_ix, offset, offsets))
                     }),
-                &blockstate,
-                &nonintersectionkey,
-                &goal_shapekey_key,
+                blockstate,
+                nonintersectionkey,
+                goal_shapekey_key,
             ));
         }
         Justmoved::Goal(moved_goalvec_ix) => {
@@ -507,9 +503,9 @@ fn get_neighboring_blockstates(
                             .iter()
                             .map(move |offset| (shape_ix, offset, offsets))
                     }),
-                &blockstate,
-                &nonintersectionkey,
-                &goal_shapekey_key,
+                blockstate,
+                nonintersectionkey,
+                goal_shapekey_key,
             ));
         }
         Justmoved::Nothing => {
@@ -529,9 +525,9 @@ fn get_neighboring_blockstates(
                             .iter()
                             .map(move |offset| (shape_ix, offset, offsets))
                     }),
-                &blockstate,
-                &nonintersectionkey,
-                &goal_shapekey_key,
+                blockstate,
+                nonintersectionkey,
+                goal_shapekey_key,
             ));
         }
     }
@@ -790,7 +786,7 @@ fn preprocess_proper_puzzle(
             chars_and_offsets
                 .iter()
                 .filter(|(c, _)| !goal_chartopoints.contains_key(c))
-                .map(|(_, offset)| offset.clone())
+                .map(|(_, offset)| *offset)
                 .collect()
         })
         .filter(|offsets: &Offsets| !offsets.is_empty())
@@ -799,7 +795,7 @@ fn preprocess_proper_puzzle(
 
     let mut goal_offsets = goal_chars_startoffset_targetoffset
         .iter()
-        .map(|(_, start, _)| start.clone())
+        .map(|(_, start, _)| *start)
         .collect_vec();
     goal_offsets.shrink_to_fit();
 
@@ -809,7 +805,7 @@ fn preprocess_proper_puzzle(
     };
     let mut goal_target_offsets = goal_chars_startoffset_targetoffset
         .iter()
-        .map(|(_, _, target)| target.clone())
+        .map(|(_, _, target)| *target)
         .collect_vec();
     goal_target_offsets.shrink_to_fit();
 
@@ -946,7 +942,7 @@ fn solution_from_auxiliaries(
                 if start_blockstate.goal_offsets == *goal_target_offsets {
                     return Some(vec![start_blockstate.clone()]);
                 }
-                let beginning_offset = start_blockstate.goal_offsets[0].clone();
+                let beginning_offset = start_blockstate.goal_offsets[0];
                 let is_legal = |offset: &Offset| -> bool {
                     nonintersectionkey.abuse_this_datastructure_for_in_bounds_check(0, offset)
                 };
@@ -1072,21 +1068,19 @@ pub fn solve_puzzle(start: &str, goal: &str) -> Result<Option<Vec<String>>, Solv
                             if *offsets != *previous_offsets {
                                 let old_offset = previous_offsets
                                     .iter()
-                                    .filter(|o| !offsets.contains(o))
-                                    .next()
+                                    .find(|o| !offsets.contains(o))
                                     .unwrap();
                                 let new_offset = offsets
                                     .iter()
-                                    .filter(|o| !previous_offsets.contains(o))
-                                    .next()
+                                    .find(|o| !previous_offsets.contains(o))
                                     .unwrap();
                                 let shape = &shapekey[shape_ix];
 
                                 let c = reconstruction_map
-                                    .remove(&(shape.clone(), old_offset.clone()))
+                                    .remove(&(shape.clone(), old_offset))
                                     .unwrap();
 
-                                reconstruction_map.insert((shape.clone(), new_offset.clone()), c);
+                                reconstruction_map.insert((shape.clone(), new_offset), c);
 
                                 break 'check_single_block;
                             }
@@ -1105,10 +1099,10 @@ pub fn solve_puzzle(start: &str, goal: &str) -> Result<Option<Vec<String>>, Solv
                                 let shape = &shapekey[goal_shapekey_key[goalvec_ix]];
 
                                 let c = reconstruction_map
-                                    .remove(&(shape.clone(), old_offset.clone()))
+                                    .remove(&(shape.clone(), *old_offset))
                                     .unwrap();
 
-                                reconstruction_map.insert((shape.clone(), new_offset.clone()), c);
+                                reconstruction_map.insert((shape.clone(), *new_offset), c);
 
                                 break 'check_single_block;
                             }

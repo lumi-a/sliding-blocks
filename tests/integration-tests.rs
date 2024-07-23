@@ -6,7 +6,7 @@ fn test_examples() {
     for puzzle in ALL_EXAMPLES {
         assert_eq!(
             Ok(Some(puzzle.min_moves)),
-            solve_puzzle_minmoves(&puzzle.start, &puzzle.goal)
+            solve_puzzle_minmoves(puzzle.start, puzzle.goal)
         );
     }
 }
