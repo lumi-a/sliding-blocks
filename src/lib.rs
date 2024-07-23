@@ -2,7 +2,6 @@ pub mod examples;
 
 use bitvec::prelude::*;
 use itertools::Itertools;
-use rustc_hash::FxHashSet;
 use std::cmp::{max, min, Ordering};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use tinyset::Set64;
@@ -313,7 +312,6 @@ fn dfs_general(
         }
     }
 
-    // TODO: Refactor to not use a vector at all
     legal_offsets.into_iter()
 }
 
@@ -361,7 +359,6 @@ fn get_neighboring_blockstates(
     ) -> impl Iterator<Item = BlockstateJustmoved> + 'a {
         moving.flat_map(
             move |(moving_shape_ix, moving_offset, offsets_with_same_shape_ix)| {
-                // TODO: Workhorse outside of closure?
                 let mut trimmed_movingshape_offsets = offsets_with_same_shape_ix.clone();
                 trimmed_movingshape_offsets.remove(&moving_offset);
                 let is_legal = |offsety: &Offset| -> bool {
@@ -390,7 +387,6 @@ fn get_neighboring_blockstates(
                     true
                 };
                 dfs_general(&moving_offset, &is_legal).map(move |mutated_offset| {
-                    // TODO: Workhorse outside of closure?
                     let mut mutated_trimmed_offsets = trimmed_movingshape_offsets.clone();
                     mutated_trimmed_offsets.insert(mutated_offset);
                     let mut new_blockstate = blockstate.clone();
@@ -449,9 +445,6 @@ fn get_neighboring_blockstates(
     let mut neighboring_blockstates: Vec<BlockstateJustmoved> = Vec::new();
     // Start with blockstate.goal_offsets first, to hopefully find the goal a little sooner
 
-    // TODO: Lots of code-duplication over these branches. Should we export it into
-    // two closures, one for adding the nongoal offsets, and one for adding the
-    // the goal-offsets?
     match justmoved {
         Justmoved::Nongoal(justmoved_shape_ix, justmoved_offset) => {
             neighboring_blockstates.extend(dfs_goal(
@@ -546,8 +539,7 @@ fn _print_puzzle(
     let mut blocks: Vec<Points> = Vec::new();
     for (shape, offsets) in shapekey.iter().zip(blockstate.nongoal_offsets.iter()) {
         for offset in offsets.iter() {
-            // TODO: Just create shift-shape method already
-            let block: Points = shape.iter().map(|p| p.add(&(&offset).into())).collect();
+            let block: Points = shift_points(shape, &offset);
             blocks.push(block);
         }
     }
@@ -824,7 +816,6 @@ fn preprocess_proper_puzzle(
     }))
 }
 
-// TODO: This code is awful, and awfully named.
 enum StringToCharToPointsResult {
     EmptyPuzzle,
     ProperPuzzle(CharToPoints, Width, Height),
@@ -909,10 +900,6 @@ fn misplaced_goalblocks_heuristic(
     // we could also check their distance from their goal_target_offsets.
     // I implemented and benchmarked that, and it was worse than this.
 
-    // TODO: Should we carry heuristic-stats throughout the A* nodes and
-    // only update the counter if a goal-block enters or leaves its target
-    // position?
-
     blockstate
         .goal_offsets
         .iter()
@@ -984,7 +971,9 @@ fn solution_from_auxiliaries(
                 justmoved: Justmoved::Nothing,
             },
             |blockstate| {
-                // TODO: More performant solution than using into_iter?
+                // TODO: There are more performant solutions than calling into_iter here,
+                // but they require a ton of refactoring and code-duplication and everything
+                // will be very ugly.
                 get_neighboring_blockstates(blockstate, nonintersectionkey, goal_shapekey_key)
                     .into_iter()
                     .map(|blockstate| (blockstate, 1))

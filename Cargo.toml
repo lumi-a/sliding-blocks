@@ -6,7 +6,6 @@ edition = "2021"
 [dependencies]
 bitvec = "1.0.1"
 itertools = "0.13.0"
-ordered-float = "4.2.0"
 pathfinding = "4.10.0"
 tinyset = "0.4.15"
 rustc-hash = "2.0.0"

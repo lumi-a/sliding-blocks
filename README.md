@@ -8,10 +8,9 @@ A web-app for playing, and rust-crate for solving, sliding-block puzzles like th
 <!-- TODO: "Document" puzzle-syntax -->
 
 # Solver
-Written in rust 🦀, the code is in the top-level directory. To accomodate all the speedup-ideas I could think of, the code became quite complicated. If you'd like to understand what's going on, feel free to contact me, and I'll gladly explain it to you! At a very basic level:
+Written in rust 🦀, the code is in the top-level directory. To accomodate all the speedup-ideas I could think of, the code became quite complicated. If you'd like to understand what's going on, feel free to contact me, and I'll gladly explain it! At a very basic level:
 - We imagines a graph, where the nodes are all the different legal block-configurations, and two nodes are adjacent if one block-configuration can be transformed into the other block-configuration by moving a single block.
 - Call a block a "goal-block" if it appears in the goal-configuration, i.e. it has a goal-position it has to reach for the puzzle to be considered "solved".
-- If there are multiple goal-blocks, we run ASTAR on that graph, where the heuristic is: "Of all the goal-blocks, how many are *not* yet in their goal-position?".
 - If there is only one goal-block, we essentially run BFS.
 
 ## Tighter ASTAR-heuristics
