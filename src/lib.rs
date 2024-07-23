@@ -54,7 +54,7 @@ fn get_points_dimensions(coordinates_set: &Points) -> (Point, Point) {
 }
 type Bounds = Shape; // min-x == 1, min-y == 1.
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 struct Offset(Coor, Coor); // Should be >= (1, 1) for most offsets
 impl Offset {
     #[inline]
@@ -77,6 +77,11 @@ impl Offset {
 impl From<&Point> for Offset {
     fn from(point: &Point) -> Self {
         Self(point.0, point.1)
+    }
+}
+impl std::hash::Hash for Offset {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        (((self.0 as u16) << 8) | (self.1 as u16)).hash(state);
     }
 }
 
