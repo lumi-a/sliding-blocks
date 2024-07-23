@@ -3,9 +3,6 @@
 
 <head>
   <meta charset="utf-8">
-  <title>Sliding Blocks</title>
-  <!-- TODO: Add favicon -->
-  <link rel="shortcut icon" href="./favicon.ico">
   <link rel="stylesheet" href="./style.css">
 </head>
 
@@ -13,6 +10,7 @@
   <noscript>This page contains webassembly and javascript content, please enable javascript in your browser.</noscript>
 
   <header>
+    <div style="flex-grow: 1"><!-- Spacer? --></div>
     <button id="change-puzzle-btn">Change Puzzle</button>
     <button id="reset-puzzle-btn">Reset</button>
     <div>
@@ -20,6 +18,10 @@
       <span id="move-counter">0</span>
       <button id="history-forward">↷</button>
     </div>
+    <div style="flex-grow: 1"><!-- Spacer. --></div>
+    <a href="https://github.com/lumi-a/sliding-blocks" target="_blank" style="margin-right: 0.5em;">
+      GitHub
+    </a>
   </header>
   <dialog id="change-puzzle-dialog">
     <div id="computation-animation" class="invisible">
