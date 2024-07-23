@@ -398,149 +398,136 @@ fn get_neighboring_blockstates(
     // the goal-offsets?
     match justmoved {
         Justmoved::Nongoal(justmoved_shape_ix, justmoved_offset) => {
-            blockstate
-                .goal_offsets
-                .iter()
-                .enumerate()
-                .for_each(|(goalvec_ix, offset)| {
+            neighboring_blockstates.extend(blockstate.goal_offsets.iter().enumerate().flat_map(
+                |(goalvec_ix, offset)| {
                     let justmoved = Justmoved::Goal(goalvec_ix);
-                    for mutated_offset in dfs_goal(goalvec_ix, offset) {
-                        let mut new_blockstate = blockstate.clone();
-                        new_blockstate.goal_offsets[goalvec_ix] = mutated_offset;
-                        neighboring_blockstates.push(BlockstateJustmoved {
-                            blockstate: new_blockstate,
-                            justmoved: justmoved.clone(),
-                        });
-                    }
-                });
-            blockstate
-                .nongoal_offsets
-                .iter()
-                .enumerate()
-                .for_each(|(shape_ix, offsets)| {
-                    // TODO: The code-duplication between these two if-branches is quite awful. Can we avoid it somehow?
-                    // The iters are incompatible types (one is an iter, the other is a filter).
-                    if shape_ix == *justmoved_shape_ix {
-                        for offset in offsets
-                            .iter()
-                            .filter(|offset| **offset != *justmoved_offset)
-                        {
-                            let mut trimmed_shape_offsets = offsets.clone();
-                            trimmed_shape_offsets.remove(offset);
-                            for mutated_offset in
-                                dfs_nongoal(shape_ix, offset, &trimmed_shape_offsets)
-                            {
-                                let mut mutated_shape_offsets = trimmed_shape_offsets.clone();
-                                mutated_shape_offsets.insert(mutated_offset.clone());
-                                let mut new_blockstate = blockstate.clone();
-                                new_blockstate.nongoal_offsets[shape_ix] = mutated_shape_offsets;
-                                let justmoved = Justmoved::Nongoal(shape_ix, mutated_offset);
-                                neighboring_blockstates.push(BlockstateJustmoved {
-                                    blockstate: new_blockstate,
-                                    justmoved,
-                                });
-                            }
-                        }
-                    } else {
-                        for offset in offsets.iter().filter(|_| true) {
-                            let mut trimmed_shape_offsets = offsets.clone();
-                            trimmed_shape_offsets.remove(offset);
-                            for mutated_offset in
-                                dfs_nongoal(shape_ix, offset, &trimmed_shape_offsets)
-                            {
-                                let mut mutated_shape_offsets = trimmed_shape_offsets.clone();
-                                mutated_shape_offsets.insert(mutated_offset.clone());
-                                let mut new_blockstate = blockstate.clone();
-                                new_blockstate.nongoal_offsets[shape_ix] = mutated_shape_offsets;
-                                let justmoved = Justmoved::Nongoal(shape_ix, mutated_offset);
-                                neighboring_blockstates.push(BlockstateJustmoved {
-                                    blockstate: new_blockstate,
-                                    justmoved,
-                                });
-                            }
-                        }
-                    }
-                });
-        }
-        Justmoved::Goal(moved_goalvec_ix) => {
-            blockstate
-                .goal_offsets
-                .iter()
-                .enumerate()
-                .for_each(|(goalvec_ix, offset)| {
-                    if goalvec_ix != *moved_goalvec_ix {
-                        let justmoved = Justmoved::Goal(goalvec_ix);
-                        for mutated_offset in dfs_goal(goalvec_ix, offset) {
+                    dfs_goal(goalvec_ix, offset)
+                        .into_iter()
+                        .map(move |mutated_offset| {
                             let mut new_blockstate = blockstate.clone();
                             new_blockstate.goal_offsets[goalvec_ix] = mutated_offset;
-                            neighboring_blockstates.push(BlockstateJustmoved {
+                            BlockstateJustmoved {
                                 blockstate: new_blockstate,
                                 justmoved: justmoved.clone(),
-                            });
-                        }
-                    }
-                });
-            blockstate
-                .nongoal_offsets
-                .iter()
-                .enumerate()
-                .for_each(|(shape_ix, offsets)| {
-                    for offset in offsets.iter() {
+                            }
+                        })
+                },
+            ));
+            neighboring_blockstates.extend(blockstate.nongoal_offsets.iter().enumerate().flat_map(
+                |(shape_ix, offsets)| {
+                    // TODO: The .filter checks shape_ix != *justmoved_shape_ix for every single offset.
+                    // Can we do better?
+                    // And do we even need to? Branch-predictor should do some solid work here,
+                    // and these checks really are cheap.
+                    offsets
+                        .iter()
+                        .filter(move |offset| {
+                            shape_ix != *justmoved_shape_ix || **offset != *justmoved_offset
+                        })
+                        .flat_map(move |offset| {
+                            let mut trimmed_shape_offsets = offsets.clone();
+                            trimmed_shape_offsets.remove(offset);
+
+                            dfs_nongoal(shape_ix, offset, &trimmed_shape_offsets)
+                                .into_iter()
+                                .map(move |mutated_offset| {
+                                    let mut mutated_shape_offsets = trimmed_shape_offsets.clone();
+                                    mutated_shape_offsets.insert(mutated_offset.clone());
+                                    let mut new_blockstate = blockstate.clone();
+                                    new_blockstate.nongoal_offsets[shape_ix] =
+                                        mutated_shape_offsets;
+                                    let justmoved = Justmoved::Nongoal(shape_ix, mutated_offset);
+                                    BlockstateJustmoved {
+                                        blockstate: new_blockstate,
+                                        justmoved,
+                                    }
+                                })
+                        })
+                },
+            ));
+        }
+        Justmoved::Goal(moved_goalvec_ix) => {
+            neighboring_blockstates.extend(
+                blockstate
+                    .goal_offsets
+                    .iter()
+                    .enumerate()
+                    .filter(|(goalvec_ix, _)| *goalvec_ix != *moved_goalvec_ix)
+                    .flat_map(|(goalvec_ix, offset)| {
+                        let justmoved = Justmoved::Goal(goalvec_ix);
+                        dfs_goal(goalvec_ix, offset)
+                            .into_iter()
+                            .map(move |mutated_offset| {
+                                let mut new_blockstate = blockstate.clone();
+                                new_blockstate.goal_offsets[goalvec_ix] = mutated_offset;
+                                BlockstateJustmoved {
+                                    blockstate: new_blockstate,
+                                    justmoved: justmoved.clone(),
+                                }
+                            })
+                    }),
+            );
+            neighboring_blockstates.extend(blockstate.nongoal_offsets.iter().enumerate().flat_map(
+                |(shape_ix, offsets)| {
+                    offsets.iter().flat_map(move |offset| {
                         let mut trimmed_shape_offsets = offsets.clone();
                         trimmed_shape_offsets.remove(offset);
-                        for mutated_offset in dfs_nongoal(shape_ix, offset, &trimmed_shape_offsets)
-                        {
-                            let mut mutated_shape_offsets = trimmed_shape_offsets.clone();
-                            mutated_shape_offsets.insert(mutated_offset.clone());
-                            let mut new_blockstate = blockstate.clone();
-                            new_blockstate.nongoal_offsets[shape_ix] = mutated_shape_offsets;
-                            let justmoved = Justmoved::Nongoal(shape_ix, mutated_offset);
-                            neighboring_blockstates.push(BlockstateJustmoved {
-                                blockstate: new_blockstate,
-                                justmoved,
-                            });
-                        }
-                    }
-                });
+
+                        dfs_nongoal(shape_ix, offset, &trimmed_shape_offsets)
+                            .into_iter()
+                            .map(move |mutated_offset| {
+                                let mut mutated_shape_offsets = trimmed_shape_offsets.clone();
+                                mutated_shape_offsets.insert(mutated_offset.clone());
+                                let mut new_blockstate = blockstate.clone();
+                                new_blockstate.nongoal_offsets[shape_ix] = mutated_shape_offsets;
+                                let justmoved = Justmoved::Nongoal(shape_ix, mutated_offset);
+                                BlockstateJustmoved {
+                                    blockstate: new_blockstate,
+                                    justmoved,
+                                }
+                            })
+                    })
+                },
+            ));
         }
         Justmoved::Nothing => {
-            blockstate
-                .goal_offsets
-                .iter()
-                .enumerate()
-                .for_each(|(goalvec_ix, offset)| {
+            neighboring_blockstates.extend(blockstate.goal_offsets.iter().enumerate().flat_map(
+                |(goalvec_ix, offset)| {
                     let justmoved = Justmoved::Goal(goalvec_ix);
-                    for mutated_offset in dfs_goal(goalvec_ix, offset) {
-                        let mut new_blockstate = blockstate.clone();
-                        new_blockstate.goal_offsets[goalvec_ix] = mutated_offset;
-                        neighboring_blockstates.push(BlockstateJustmoved {
-                            blockstate: new_blockstate,
-                            justmoved: justmoved.clone(),
-                        });
-                    }
-                });
-            blockstate
-                .nongoal_offsets
-                .iter()
-                .enumerate()
-                .for_each(|(shape_ix, offsets)| {
-                    for offset in offsets.iter() {
+                    dfs_goal(goalvec_ix, offset)
+                        .into_iter()
+                        .map(move |mutated_offset| {
+                            let mut new_blockstate = blockstate.clone();
+                            new_blockstate.goal_offsets[goalvec_ix] = mutated_offset;
+                            BlockstateJustmoved {
+                                blockstate: new_blockstate,
+                                justmoved: justmoved.clone(),
+                            }
+                        })
+                },
+            ));
+            neighboring_blockstates.extend(blockstate.nongoal_offsets.iter().enumerate().flat_map(
+                |(shape_ix, offsets)| {
+                    offsets.iter().flat_map(move |offset| {
                         let mut trimmed_shape_offsets = offsets.clone();
                         trimmed_shape_offsets.remove(offset);
-                        for mutated_offset in dfs_nongoal(shape_ix, offset, &trimmed_shape_offsets)
-                        {
-                            let mut mutated_shape_offsets = trimmed_shape_offsets.clone();
-                            mutated_shape_offsets.insert(mutated_offset.clone());
-                            let mut new_blockstate = blockstate.clone();
-                            new_blockstate.nongoal_offsets[shape_ix] = mutated_shape_offsets;
-                            let justmoved = Justmoved::Nongoal(shape_ix, mutated_offset);
-                            neighboring_blockstates.push(BlockstateJustmoved {
-                                blockstate: new_blockstate,
-                                justmoved,
-                            });
-                        }
-                    }
-                });
+
+                        dfs_nongoal(shape_ix, offset, &trimmed_shape_offsets)
+                            .into_iter()
+                            .map(move |mutated_offset| {
+                                let mut mutated_shape_offsets = trimmed_shape_offsets.clone();
+                                mutated_shape_offsets.insert(mutated_offset.clone());
+                                let mut new_blockstate = blockstate.clone();
+                                new_blockstate.nongoal_offsets[shape_ix] = mutated_shape_offsets;
+                                let justmoved = Justmoved::Nongoal(shape_ix, mutated_offset);
+                                BlockstateJustmoved {
+                                    blockstate: new_blockstate,
+                                    justmoved,
+                                }
+                            })
+                    })
+                },
+            ));
         }
     }
     neighboring_blockstates
