@@ -32,6 +32,9 @@ impl From<&Offset> for Point {
 }
 
 type Points = BTreeSet<Point>;
+fn shift_points(points: &Points, offset: &Offset) -> Points {
+    points.iter().map(|p| p.add(&offset.into())).collect()
+}
 type CharToPoints = BTreeMap<char, Points>;
 type ReconstructionMap = HashMap<(Shape, Offset), char>;
 
@@ -115,7 +118,6 @@ impl std::ops::Index<(usize, &Offset, usize, &Offset)> for Nonintersectionkey {
     }
 }
 impl Nonintersectionkey {
-    // TODO: Can (should) you rewrite the bounds-check into something else?
     fn abuse_this_datastructure_for_in_bounds_check(
         &self,
         shape_ix: usize,
@@ -137,7 +139,6 @@ pub enum SolvePuzzleError {
 impl std::fmt::Display for SolvePuzzleError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            // TODO: Better error messages.
             SolvePuzzleError::MismatchedBounds => write!(f, "Start-bounds don't match goal-bounds."),
             SolvePuzzleError::MismatchedGoalShapes(c) => write!(f, "The shape of the goal-block '{c}' in the start-configuration doesn't match its shape in the goal-configuration."),
             SolvePuzzleError::GoalblockWithoutStartingblock(c) => write!(f, "The block '{c}' is in the goal-configuration, but not in the start-configuration."),
@@ -164,33 +165,49 @@ fn build_nonintersectionkey(
 ) -> Nonintersectionkey {
     // TODO: This can be done faster by first storing the relative offsets for which the
     // nik is true, and then filling in the actual nik.
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    struct RelativeOffset(isize, isize); // (isize, isize) because Coor is too small and I want negatives
+    let mut relative_nik: HashMap<(usize, usize, RelativeOffset), bool> = HashMap::new();
+    let mut inbounds: HashMap<(usize, Offset), bool> = HashMap::new();
 
     // Brace yourselves
 
     let mut nikvec: ShapevecForNik<Vec<ShapevecForNik<BitVec>>> = Vec::new();
-    for shape_a in shapekey {
+    for (shape_ix_a, shape_a) in shapekey.iter().enumerate() {
         let mut nik_a: Vec<ShapevecForNik<BitVec>> = Vec::new();
         for ya in 0..=(height + 1) {
             for xa in 0..=(width + 1) {
                 let mut nik_a_xy: ShapevecForNik<BitVec> = ShapevecForNik::new();
-                let shift_a = Point(xa, ya);
 
-                // TODO: Extract into shift-function
-                let shifted_a: Points = shape_a.iter().map(|p| p.add(&shift_a)).collect();
+                let shift_a = Offset(xa, ya);
+                let shifted_a: Points = shift_points(&shape_a, &shift_a);
                 if shifted_a.is_subset(bounds) {
                     // Let the fun begin
-                    for shape_b in shapekey {
+                    for (shape_ix_b, shape_b) in shapekey.iter().enumerate() {
                         let mut nik_a_xy_b: BitVec = BitVec::new();
                         for yb in 0..=(height + 1) {
                             for xb in 0..=(width + 1) {
-                                let shift_b = Point(xb, yb);
-                                // TODO: Extract into shift-function
-                                let shifted_b: Points =
-                                    shape_b.iter().map(|p| p.add(&shift_b)).collect();
-
-                                let nik_a_xy_b_xy: bool = shifted_b.is_subset(bounds)
-                                    && shifted_b.is_disjoint(&shifted_a);
-                                nik_a_xy_b.push(nik_a_xy_b_xy);
+                                let relative_offset = RelativeOffset(
+                                    xb as isize + width as isize - xa as isize,
+                                    yb as isize + height as isize - ya as isize,
+                                );
+                                let shift_b = Offset(xb, yb);
+                                nik_a_xy_b.push(
+                                    *relative_nik
+                                        .entry((shape_ix_a, shape_ix_b, relative_offset))
+                                        .or_insert({
+                                            let shifted_b: Points =
+                                                shift_points(&shape_b, &shift_b);
+                                            shifted_b.is_disjoint(&shifted_a)
+                                        })
+                                        && *inbounds
+                                            .entry((shape_ix_b, shift_b.clone()))
+                                            .or_insert({
+                                                let shifted_b: Points =
+                                                    shift_points(&shape_b, &shift_b);
+                                                shifted_b.is_subset(bounds)
+                                            }),
+                                );
                             }
                         }
                         nik_a_xy_b.shrink_to_fit();
