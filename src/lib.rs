@@ -4,6 +4,7 @@ use bitvec::prelude::*;
 use itertools::Itertools;
 use std::cmp::{max, min, Ordering};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
+use tinyset::Set64;
 use wasm_bindgen::prelude::*;
 
 type Coor = u8; // If changing this type, also change the type of Offset
@@ -58,7 +59,7 @@ fn get_extremes(coordinates_set: &Points) -> (Point, Point) {
 }
 type Bounds = Shape; // min-x == 1, min-y == 1.
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Copy)]
 struct Offset(u16);
 impl Offset {
     #[inline]
@@ -103,8 +104,16 @@ impl From<&Point> for Offset {
         Self::new(point.0, point.1)
     }
 }
+impl tinyset::Fits64 for Offset {
+    unsafe fn from_u64(x: u64) -> Self {
+        Self(x as u16)
+    }
+    fn to_u64(self) -> u64 {
+        self.0 as u64
+    }
+}
 
-type Offsets = BTreeSet<Offset>;
+type Offsets = Set64<Offset>;
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct Blockstate {
     nongoal_offsets: Vec<Offsets>,
@@ -357,7 +366,7 @@ fn get_neighboring_blockstates(
     // for _every_ offset. The only reason we do this is to filter out
     // in case of BlockstateJustmoved::nongoal.
     fn dfs_nongoal<'a>(
-        moving: impl Iterator<Item = (usize, &'a Offset, &'a Offsets)> + 'a,
+        moving: impl Iterator<Item = (usize, Offset, &'a Offsets)> + 'a,
         blockstate: &'a Blockstate,
         nonintersectionkey: &'a Nonintersectionkey,
         goal_shapekey_key: &'a GoalShapekeyKey,
@@ -366,14 +375,14 @@ fn get_neighboring_blockstates(
             move |(moving_shape_ix, moving_offset, offsets_with_same_shape_ix)| {
                 // TODO: Workhorse outside of closure?
                 let mut trimmed_movingshape_offsets = offsets_with_same_shape_ix.clone();
-                trimmed_movingshape_offsets.remove(moving_offset);
+                trimmed_movingshape_offsets.remove(&moving_offset);
                 let is_legal = |offsety: &Offset| -> bool {
                     for (shape_ix, shape_offsets) in blockstate.nongoal_offsets.iter().enumerate() {
                         if shape_ix == moving_shape_ix {
                             continue;
                         }
-                        for offset in shape_offsets {
-                            if !nonintersectionkey[(shape_ix, offset, moving_shape_ix, offsety)] {
+                        for offset in shape_offsets.iter() {
+                            if !nonintersectionkey[(shape_ix, &offset, moving_shape_ix, offsety)] {
                                 return false;
                             }
                         }
@@ -384,15 +393,15 @@ fn get_neighboring_blockstates(
                             return false;
                         }
                     }
-                    for offset in &trimmed_movingshape_offsets {
-                        if !nonintersectionkey[(moving_shape_ix, offset, moving_shape_ix, offsety)]
+                    for offset in trimmed_movingshape_offsets.iter() {
+                        if !nonintersectionkey[(moving_shape_ix, &offset, moving_shape_ix, offsety)]
                         {
                             return false;
                         }
                     }
                     true
                 };
-                dfs_general(moving_offset, &is_legal).map(move |mutated_offset| {
+                dfs_general(&moving_offset, &is_legal).map(move |mutated_offset| {
                     // TODO: Workhorse outside of closure?
                     let mut mutated_trimmed_offsets = trimmed_movingshape_offsets.clone();
                     mutated_trimmed_offsets.insert(mutated_offset.clone());
@@ -418,8 +427,8 @@ fn get_neighboring_blockstates(
             let moving_shape_ix = goal_shapekey_key[moving_goalvec_ix];
             let is_legal = |offsety: &Offset| -> bool {
                 for (shape_ix, shape_offsets) in blockstate.nongoal_offsets.iter().enumerate() {
-                    for offset in shape_offsets {
-                        if !nonintersectionkey[(shape_ix, offset, moving_shape_ix, offsety)] {
+                    for offset in shape_offsets.iter() {
+                        if !nonintersectionkey[(shape_ix, &offset, moving_shape_ix, offsety)] {
                             return false;
                         }
                     }
@@ -436,7 +445,7 @@ fn get_neighboring_blockstates(
                 true
             };
             let justmoved = Justmoved::Goal(moving_goalvec_ix);
-            dfs_general(moving_offset, &is_legal).map(move |mutated_offset| {
+            dfs_general(&moving_offset, &is_legal).map(move |mutated_offset| {
                 let mut new_blockstate = blockstate.clone();
                 new_blockstate.goal_offsets[moving_goalvec_ix] = mutated_offset;
                 BlockstateJustmoved {
@@ -470,13 +479,13 @@ fn get_neighboring_blockstates(
                     .enumerate()
                     .flat_map(|(shape_ix, offsets)| {
                         offsets
-                            .into_iter()
+                            .iter()
                             .filter(move |offset| {
                                 // TODO: The .filter checks shape_ix != *justmoved_shape_ix for every single offset.
                                 // Can we do better?
                                 // And do we even need to? Branch-predictor should do some solid work here,
                                 // and these checks really are cheap.
-                                shape_ix != *justmoved_shape_ix || *offset != justmoved_offset
+                                shape_ix != *justmoved_shape_ix || *offset != *justmoved_offset
                             })
                             .map(move |offset| (shape_ix, offset, offsets))
                     }),
@@ -503,7 +512,7 @@ fn get_neighboring_blockstates(
                     .enumerate()
                     .flat_map(|(shape_ix, offsets)| {
                         offsets
-                            .into_iter()
+                            .iter()
                             .map(move |offset| (shape_ix, offset, offsets))
                     }),
                 &blockstate,
@@ -525,7 +534,7 @@ fn get_neighboring_blockstates(
                     .enumerate()
                     .flat_map(|(shape_ix, offsets)| {
                         offsets
-                            .into_iter()
+                            .iter()
                             .map(move |offset| (shape_ix, offset, offsets))
                     }),
                 &blockstate,
@@ -548,9 +557,9 @@ fn _print_puzzle(
     // Create vec of blocks:
     let mut blocks: Vec<Points> = Vec::new();
     for (shape, offsets) in shapekey.iter().zip(blockstate.nongoal_offsets.iter()) {
-        for offset in offsets {
+        for offset in offsets.iter() {
             // TODO: Just create shift-shape method already
-            let block: Points = shape.iter().map(|p| p.add(&offset.into())).collect();
+            let block: Points = shape.iter().map(|p| p.add(&(&offset).into())).collect();
             blocks.push(block);
         }
     }
@@ -1069,10 +1078,16 @@ pub fn solve_puzzle(start: &str, goal: &str) -> Result<Option<Vec<String>>, Solv
                             .enumerate()
                         {
                             if *offsets != *previous_offsets {
-                                let old_offset =
-                                    previous_offsets.difference(offsets).next().unwrap();
-                                let new_offset =
-                                    offsets.difference(previous_offsets).next().unwrap();
+                                let old_offset = previous_offsets
+                                    .iter()
+                                    .filter(|o| !offsets.contains(o))
+                                    .next()
+                                    .unwrap();
+                                let new_offset = offsets
+                                    .iter()
+                                    .filter(|o| !previous_offsets.contains(o))
+                                    .next()
+                                    .unwrap();
                                 let shape = &shapekey[shape_ix];
 
                                 let c = reconstruction_map
