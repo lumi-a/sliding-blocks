@@ -314,6 +314,9 @@ fn get_neighboring_blockstates(
     nonintersectionkey: &Nonintersectionkey,
     goal_shapekey_key: &GoalShapekeyKey,
 ) -> Vec<BlockstateJustmoved> {
+    // TODO: This is quite ugly, taking in a reference to the other offsets
+    // for _every_ offset. The only reason we do this is to filter out
+    // in case of BlockstateJustmoved::nongoal.
     fn dfs_nongoal<'a>(
         moving: impl Iterator<Item = (usize, &'a Offset, &'a Offsets)> + 'a,
         blockstate: &'a Blockstate,
@@ -331,8 +334,6 @@ fn get_neighboring_blockstates(
                             continue;
                         }
                         for offset in shape_offsets {
-                            // TODO: How bad are these "as usize" conversions?
-                            // If they're really bad, I might just end up using usize as the type for Coor
                             if !nonintersectionkey[(shape_ix, offset, moving_shape_ix, offsety)] {
                                 return false;
                             }
@@ -377,13 +378,8 @@ fn get_neighboring_blockstates(
         moving.flat_map(move |(moving_goalvec_ix, moving_offset)| {
             let moving_shape_ix = goal_shapekey_key[moving_goalvec_ix];
             let is_legal = |offsety: &Offset| -> bool {
-                // TODO: This function assumes there are other blocks on the field, because
-                // we currently use their nonintersectionkeys to additionally verify that
-                // offsety is in-bounds
                 for (shape_ix, shape_offsets) in blockstate.nongoal_offsets.iter().enumerate() {
                     for offset in shape_offsets {
-                        // TODO: How bad are these "as usize" conversions?
-                        // If they're really bad, I might just end up using usize as the type for Coor
                         if !nonintersectionkey[(shape_ix, offset, moving_shape_ix, offsety)] {
                             return false;
                         }
