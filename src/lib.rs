@@ -6,7 +6,7 @@ use std::cmp::{max, min, Ordering};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use wasm_bindgen::prelude::*;
 
-type Coor = u8;
+type Coor = u8; // If changing this type, also change the type of Offset
 type Width = Coor;
 type Height = Coor;
 
@@ -27,7 +27,7 @@ impl Point {
 }
 impl From<&Offset> for Point {
     fn from(offset: &Offset) -> Self {
-        Self(offset.0, offset.1)
+        Self(offset.x(), offset.y())
     }
 }
 
@@ -59,28 +59,48 @@ fn get_extremes(coordinates_set: &Points) -> (Point, Point) {
 type Bounds = Shape; // min-x == 1, min-y == 1.
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-struct Offset(Coor, Coor); // Should be >= (1, 1) for most offsets
+struct Offset(u16);
 impl Offset {
     #[inline]
+    fn new(x: Coor, y: Coor) -> Self {
+        Self(((x as u16) << 8) | (y as u16))
+    }
+    #[inline]
+    fn x(&self) -> Coor {
+        (self.0 >> 8) as Coor
+    }
+    #[inline]
+    fn y(&self) -> Coor {
+        (self.0 & 0xff) as Coor
+    }
+    #[inline]
+    fn x_usize(&self) -> usize {
+        (self.0 >> 8) as usize
+    }
+    #[inline]
+    fn y_usize(&self) -> usize {
+        (self.0 & 0xff) as usize
+    }
+    #[inline]
     fn up(&self) -> Self {
-        Self(self.0, self.1 + 1)
+        Self(self.0 + 1)
     }
     #[inline]
     fn down(&self) -> Self {
-        Self(self.0, self.1 - 1)
+        Self(self.0 - 1)
     }
     #[inline]
     fn left(&self) -> Self {
-        Self(self.0 - 1, self.1)
+        Self(self.0 - 0x100)
     }
     #[inline]
     fn right(&self) -> Self {
-        Self(self.0 + 1, self.1)
+        Self(self.0 + 0x100)
     }
 }
 impl From<&Point> for Offset {
     fn from(point: &Point) -> Self {
-        Self(point.0, point.1)
+        Self::new(point.0, point.1)
     }
 }
 
@@ -111,19 +131,21 @@ impl std::ops::Index<(usize, &Offset, usize, &Offset)> for Nonintersectionkey {
     #[inline]
     fn index(
         &self,
-        (shape_ix_a, Offset(xa, ya), shape_ix_b, Offset(xb, yb)): (usize, &Offset, usize, &Offset),
+        (shape_ix_a, a, shape_ix_b, b): (usize, &Offset, usize, &Offset),
     ) -> &Self::Output {
-        &self.nik[shape_ix_a][*xa as usize + (*ya as usize) * self.width][shape_ix_b]
-            [*xb as usize + (*yb as usize) * self.width]
+        // TODO: Store Offset in a different form so that we don't need to convert them this way?
+        // Perhaps we could also store ShapevecForNik as a HashMap?
+        &self.nik[shape_ix_a][a.x_usize() + a.y_usize() * self.width][shape_ix_b]
+            [b.x_usize() + b.y_usize() * self.width]
     }
 }
 impl Nonintersectionkey {
     fn abuse_this_datastructure_for_in_bounds_check(
         &self,
         shape_ix: usize,
-        Offset(xa, ya): &Offset,
+        offset: &Offset,
     ) -> bool {
-        !self.nik[shape_ix][*xa as usize + (*ya as usize) * self.width].is_empty()
+        !self.nik[shape_ix][offset.x_usize() + offset.y_usize() * self.width].is_empty()
     }
 }
 
@@ -179,7 +201,7 @@ fn build_nonintersectionkey(
             for xa in 0..=(width + 1) {
                 let mut nik_a_xy: ShapevecForNik<BitVec> = ShapevecForNik::new();
 
-                let shift_a = Offset(xa, ya);
+                let shift_a = Offset::new(xa, ya);
                 let shifted_a: Points = shift_points(&shape_a, &shift_a);
                 if shifted_a.is_subset(bounds) {
                     // Let the fun begin
@@ -191,7 +213,7 @@ fn build_nonintersectionkey(
                                     xb as isize + width as isize - xa as isize,
                                     yb as isize + height as isize - ya as isize,
                                 );
-                                let shift_b = Offset(xb, yb);
+                                let shift_b = Offset::new(xb, yb);
                                 nik_a_xy_b.push(
                                     *relative_nik
                                         .entry((shape_ix_a, shape_ix_b, relative_offset))
@@ -1023,7 +1045,8 @@ pub fn solve_puzzle(start: &str, goal: &str) -> Result<Option<Vec<String>>, Solv
 
                     for ((shape, offset), c) in rm.iter() {
                         for Point(x, y) in shape.iter() {
-                            board[(y + offset.1 - 1) as usize][(x + offset.0 - 1) as usize] = *c;
+                            board[(y + offset.y() - 1) as usize][(x + offset.x() - 1) as usize] =
+                                *c;
                         }
                     }
 
