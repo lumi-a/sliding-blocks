@@ -212,7 +212,10 @@ fn build_nonintersectionkey(
 }
 
 // TODO: I have no idea if `&dyn Fn(Offset) -> bool` is the right signature as I didn't learn about `&dyn` yet
-fn dfs_general(initial_offset: &Offset, is_legal: &dyn Fn(&Offset) -> bool) -> Vec<Offset> {
+fn dfs_general(
+    initial_offset: &Offset,
+    is_legal: &dyn Fn(&Offset) -> bool,
+) -> impl Iterator<Item = Offset> {
     let mut legal_offsets: Vec<Offset> = Vec::new();
     let mut seen_offsets: BTreeSet<Offset> = BTreeSet::new(); // TODO: Different data structures?
     seen_offsets.insert(initial_offset.clone());
@@ -274,7 +277,8 @@ fn dfs_general(initial_offset: &Offset, is_legal: &dyn Fn(&Offset) -> bool) -> V
         }
     }
 
-    legal_offsets
+    // TODO: Refactor to not use a vector at all
+    legal_offsets.into_iter()
 }
 
 // To keep track of which block we just moved,
@@ -310,67 +314,103 @@ fn get_neighboring_blockstates(
     nonintersectionkey: &Nonintersectionkey,
     goal_shapekey_key: &GoalShapekeyKey,
 ) -> Vec<BlockstateJustmoved> {
-    let dfs_nongoal = |movingshape_ix: usize,
-                       moving_offset: &Offset,
-                       trimmed_movingshape_offsets: &Offsets|
-     -> Vec<Offset> {
-        let is_legal = |offsety: &Offset| -> bool {
-            for (shape_ix, shape_offsets) in blockstate.nongoal_offsets.iter().enumerate() {
-                if shape_ix == movingshape_ix {
-                    continue;
-                }
-                for offset in shape_offsets {
-                    // TODO: How bad are these "as usize" conversions?
-                    // If they're really bad, I might just end up using usize as the type for Coor
-                    if !nonintersectionkey[(shape_ix, offset, movingshape_ix, offsety)] {
-                        return false;
+    fn dfs_nongoal<'a>(
+        moving: impl Iterator<Item = (usize, &'a Offset, &'a Offsets)> + 'a,
+        blockstate: &'a Blockstate,
+        nonintersectionkey: &'a Nonintersectionkey,
+        goal_shapekey_key: &'a GoalShapekeyKey,
+    ) -> impl Iterator<Item = BlockstateJustmoved> + 'a {
+        moving.flat_map(
+            move |(moving_shape_ix, moving_offset, offsets_with_same_shape_ix)| {
+                // TODO: Workhorse outside of closure?
+                let mut trimmed_movingshape_offsets = offsets_with_same_shape_ix.clone();
+                trimmed_movingshape_offsets.remove(moving_offset);
+                let is_legal = |offsety: &Offset| -> bool {
+                    for (shape_ix, shape_offsets) in blockstate.nongoal_offsets.iter().enumerate() {
+                        if shape_ix == moving_shape_ix {
+                            continue;
+                        }
+                        for offset in shape_offsets {
+                            // TODO: How bad are these "as usize" conversions?
+                            // If they're really bad, I might just end up using usize as the type for Coor
+                            if !nonintersectionkey[(shape_ix, offset, moving_shape_ix, offsety)] {
+                                return false;
+                            }
+                        }
+                    }
+                    for (goalvec_ix, offset) in blockstate.goal_offsets.iter().enumerate() {
+                        let shape_ix = goal_shapekey_key[goalvec_ix];
+                        if !nonintersectionkey[(shape_ix, offset, moving_shape_ix, offsety)] {
+                            return false;
+                        }
+                    }
+                    for offset in &trimmed_movingshape_offsets {
+                        if !nonintersectionkey[(moving_shape_ix, offset, moving_shape_ix, offsety)]
+                        {
+                            return false;
+                        }
+                    }
+                    true
+                };
+                dfs_general(moving_offset, &is_legal).map(move |mutated_offset| {
+                    // TODO: Workhorse outside of closure?
+                    let mut mutated_trimmed_offsets = trimmed_movingshape_offsets.clone();
+                    mutated_trimmed_offsets.insert(mutated_offset.clone());
+                    let mut new_blockstate = blockstate.clone();
+                    new_blockstate.nongoal_offsets[moving_shape_ix] = mutated_trimmed_offsets;
+                    let justmoved = Justmoved::Nongoal(moving_shape_ix, mutated_offset);
+                    BlockstateJustmoved {
+                        blockstate: new_blockstate,
+                        justmoved,
+                    }
+                })
+            },
+        )
+    }
+
+    fn dfs_goal<'a>(
+        moving: impl Iterator<Item = (usize, &'a Offset)> + 'a,
+        blockstate: &'a Blockstate,
+        nonintersectionkey: &'a Nonintersectionkey,
+        goal_shapekey_key: &'a GoalShapekeyKey,
+    ) -> impl Iterator<Item = BlockstateJustmoved> + 'a {
+        moving.flat_map(move |(moving_goalvec_ix, moving_offset)| {
+            let moving_shape_ix = goal_shapekey_key[moving_goalvec_ix];
+            let is_legal = |offsety: &Offset| -> bool {
+                // TODO: This function assumes there are other blocks on the field, because
+                // we currently use their nonintersectionkeys to additionally verify that
+                // offsety is in-bounds
+                for (shape_ix, shape_offsets) in blockstate.nongoal_offsets.iter().enumerate() {
+                    for offset in shape_offsets {
+                        // TODO: How bad are these "as usize" conversions?
+                        // If they're really bad, I might just end up using usize as the type for Coor
+                        if !nonintersectionkey[(shape_ix, offset, moving_shape_ix, offsety)] {
+                            return false;
+                        }
                     }
                 }
-            }
-            for (goalvec_ix, offset) in blockstate.goal_offsets.iter().enumerate() {
-                let shape_ix = goal_shapekey_key[goalvec_ix];
-                if !nonintersectionkey[(shape_ix, offset, movingshape_ix, offsety)] {
-                    return false;
-                }
-            }
-            for offset in trimmed_movingshape_offsets {
-                if !nonintersectionkey[(movingshape_ix, offset, movingshape_ix, offsety)] {
-                    return false;
-                }
-            }
-            true
-        };
-        dfs_general(moving_offset, &is_legal)
-    };
-
-    let dfs_goal = |moving_goalvec_ix: usize, moving_offset: &Offset| -> Vec<Offset> {
-        let moving_shape_ix = goal_shapekey_key[moving_goalvec_ix];
-        let is_legal = |offsety: &Offset| -> bool {
-            // TODO: This function assumes there are other blocks on the field, because
-            // we currently use their nonintersectionkeys to additionally verify that
-            // offsety is in-bounds
-            for (shape_ix, shape_offsets) in blockstate.nongoal_offsets.iter().enumerate() {
-                for offset in shape_offsets {
-                    // TODO: How bad are these "as usize" conversions?
-                    // If they're really bad, I might just end up using usize as the type for Coor
+                for (goalvec_ix, offset) in blockstate.goal_offsets.iter().enumerate() {
+                    if goalvec_ix == moving_goalvec_ix {
+                        continue;
+                    }
+                    let shape_ix = goal_shapekey_key[goalvec_ix];
                     if !nonintersectionkey[(shape_ix, offset, moving_shape_ix, offsety)] {
                         return false;
                     }
                 }
-            }
-            for (goalvec_ix, offset) in blockstate.goal_offsets.iter().enumerate() {
-                if goalvec_ix == moving_goalvec_ix {
-                    continue;
+                true
+            };
+            let justmoved = Justmoved::Goal(moving_goalvec_ix);
+            dfs_general(moving_offset, &is_legal).map(move |mutated_offset| {
+                let mut new_blockstate = blockstate.clone();
+                new_blockstate.goal_offsets[moving_goalvec_ix] = mutated_offset;
+                BlockstateJustmoved {
+                    blockstate: new_blockstate,
+                    justmoved: justmoved.clone(),
                 }
-                let shape_ix = goal_shapekey_key[goalvec_ix];
-                if !nonintersectionkey[(shape_ix, offset, moving_shape_ix, offsety)] {
-                    return false;
-                }
-            }
-            true
-        };
-        dfs_general(moving_offset, &is_legal)
-    };
+            })
+        })
+    }
 
     // It's okay to gather all these into a vector rather than a set,
     // because all neighbors WILL be unique.
@@ -382,135 +422,80 @@ fn get_neighboring_blockstates(
     // the goal-offsets?
     match justmoved {
         Justmoved::Nongoal(justmoved_shape_ix, justmoved_offset) => {
-            neighboring_blockstates.extend(blockstate.goal_offsets.iter().enumerate().flat_map(
-                |(goalvec_ix, offset)| {
-                    let justmoved = Justmoved::Goal(goalvec_ix);
-                    dfs_goal(goalvec_ix, offset)
-                        .into_iter()
-                        .map(move |mutated_offset| {
-                            let mut new_blockstate = blockstate.clone();
-                            new_blockstate.goal_offsets[goalvec_ix] = mutated_offset;
-                            BlockstateJustmoved {
-                                blockstate: new_blockstate,
-                                justmoved: justmoved.clone(),
-                            }
-                        })
-                },
+            neighboring_blockstates.extend(dfs_goal(
+                blockstate.goal_offsets.iter().enumerate(),
+                blockstate,
+                nonintersectionkey,
+                goal_shapekey_key,
             ));
-            neighboring_blockstates.extend(blockstate.nongoal_offsets.iter().enumerate().flat_map(
-                |(shape_ix, offsets)| {
-                    // TODO: The .filter checks shape_ix != *justmoved_shape_ix for every single offset.
-                    // Can we do better?
-                    // And do we even need to? Branch-predictor should do some solid work here,
-                    // and these checks really are cheap.
-                    offsets
-                        .iter()
-                        .filter(move |offset| {
-                            shape_ix != *justmoved_shape_ix || **offset != *justmoved_offset
-                        })
-                        .flat_map(move |offset| {
-                            let mut trimmed_shape_offsets = offsets.clone();
-                            trimmed_shape_offsets.remove(offset);
-
-                            dfs_nongoal(shape_ix, offset, &trimmed_shape_offsets)
-                                .into_iter()
-                                .map(move |mutated_offset| {
-                                    let mut mutated_shape_offsets = trimmed_shape_offsets.clone();
-                                    mutated_shape_offsets.insert(mutated_offset.clone());
-                                    let mut new_blockstate = blockstate.clone();
-                                    new_blockstate.nongoal_offsets[shape_ix] =
-                                        mutated_shape_offsets;
-                                    let justmoved = Justmoved::Nongoal(shape_ix, mutated_offset);
-                                    BlockstateJustmoved {
-                                        blockstate: new_blockstate,
-                                        justmoved,
-                                    }
-                                })
-                        })
-                },
+            neighboring_blockstates.extend(dfs_nongoal(
+                blockstate
+                    .nongoal_offsets
+                    .iter()
+                    .enumerate()
+                    .flat_map(|(shape_ix, offsets)| {
+                        offsets
+                            .into_iter()
+                            .filter(move |offset| {
+                                // TODO: The .filter checks shape_ix != *justmoved_shape_ix for every single offset.
+                                // Can we do better?
+                                // And do we even need to? Branch-predictor should do some solid work here,
+                                // and these checks really are cheap.
+                                shape_ix != *justmoved_shape_ix || *offset != justmoved_offset
+                            })
+                            .map(move |offset| (shape_ix, offset, offsets))
+                    }),
+                &blockstate,
+                &nonintersectionkey,
+                &goal_shapekey_key,
             ));
         }
         Justmoved::Goal(moved_goalvec_ix) => {
-            neighboring_blockstates.extend(
+            neighboring_blockstates.extend(dfs_goal(
                 blockstate
                     .goal_offsets
                     .iter()
                     .enumerate()
-                    .filter(|(goalvec_ix, _)| *goalvec_ix != *moved_goalvec_ix)
-                    .flat_map(|(goalvec_ix, offset)| {
-                        let justmoved = Justmoved::Goal(goalvec_ix);
-                        dfs_goal(goalvec_ix, offset)
+                    .filter(|(goalvec_ix, _)| *goalvec_ix != *moved_goalvec_ix),
+                blockstate,
+                nonintersectionkey,
+                goal_shapekey_key,
+            ));
+            neighboring_blockstates.extend(dfs_nongoal(
+                blockstate
+                    .nongoal_offsets
+                    .iter()
+                    .enumerate()
+                    .flat_map(|(shape_ix, offsets)| {
+                        offsets
                             .into_iter()
-                            .map(move |mutated_offset| {
-                                let mut new_blockstate = blockstate.clone();
-                                new_blockstate.goal_offsets[goalvec_ix] = mutated_offset;
-                                BlockstateJustmoved {
-                                    blockstate: new_blockstate,
-                                    justmoved: justmoved.clone(),
-                                }
-                            })
+                            .map(move |offset| (shape_ix, offset, offsets))
                     }),
-            );
-            neighboring_blockstates.extend(blockstate.nongoal_offsets.iter().enumerate().flat_map(
-                |(shape_ix, offsets)| {
-                    offsets.iter().flat_map(move |offset| {
-                        let mut trimmed_shape_offsets = offsets.clone();
-                        trimmed_shape_offsets.remove(offset);
-
-                        dfs_nongoal(shape_ix, offset, &trimmed_shape_offsets)
-                            .into_iter()
-                            .map(move |mutated_offset| {
-                                let mut mutated_shape_offsets = trimmed_shape_offsets.clone();
-                                mutated_shape_offsets.insert(mutated_offset.clone());
-                                let mut new_blockstate = blockstate.clone();
-                                new_blockstate.nongoal_offsets[shape_ix] = mutated_shape_offsets;
-                                let justmoved = Justmoved::Nongoal(shape_ix, mutated_offset);
-                                BlockstateJustmoved {
-                                    blockstate: new_blockstate,
-                                    justmoved,
-                                }
-                            })
-                    })
-                },
+                &blockstate,
+                &nonintersectionkey,
+                &goal_shapekey_key,
             ));
         }
         Justmoved::Nothing => {
-            neighboring_blockstates.extend(blockstate.goal_offsets.iter().enumerate().flat_map(
-                |(goalvec_ix, offset)| {
-                    let justmoved = Justmoved::Goal(goalvec_ix);
-                    dfs_goal(goalvec_ix, offset)
-                        .into_iter()
-                        .map(move |mutated_offset| {
-                            let mut new_blockstate = blockstate.clone();
-                            new_blockstate.goal_offsets[goalvec_ix] = mutated_offset;
-                            BlockstateJustmoved {
-                                blockstate: new_blockstate,
-                                justmoved: justmoved.clone(),
-                            }
-                        })
-                },
+            neighboring_blockstates.extend(dfs_goal(
+                blockstate.goal_offsets.iter().enumerate(),
+                blockstate,
+                nonintersectionkey,
+                goal_shapekey_key,
             ));
-            neighboring_blockstates.extend(blockstate.nongoal_offsets.iter().enumerate().flat_map(
-                |(shape_ix, offsets)| {
-                    offsets.iter().flat_map(move |offset| {
-                        let mut trimmed_shape_offsets = offsets.clone();
-                        trimmed_shape_offsets.remove(offset);
-
-                        dfs_nongoal(shape_ix, offset, &trimmed_shape_offsets)
+            neighboring_blockstates.extend(dfs_nongoal(
+                blockstate
+                    .nongoal_offsets
+                    .iter()
+                    .enumerate()
+                    .flat_map(|(shape_ix, offsets)| {
+                        offsets
                             .into_iter()
-                            .map(move |mutated_offset| {
-                                let mut mutated_shape_offsets = trimmed_shape_offsets.clone();
-                                mutated_shape_offsets.insert(mutated_offset.clone());
-                                let mut new_blockstate = blockstate.clone();
-                                new_blockstate.nongoal_offsets[shape_ix] = mutated_shape_offsets;
-                                let justmoved = Justmoved::Nongoal(shape_ix, mutated_offset);
-                                BlockstateJustmoved {
-                                    blockstate: new_blockstate,
-                                    justmoved,
-                                }
-                            })
-                    })
-                },
+                            .map(move |offset| (shape_ix, offset, offsets))
+                    }),
+                &blockstate,
+                &nonintersectionkey,
+                &goal_shapekey_key,
             ));
         }
     }
@@ -929,7 +914,7 @@ fn solution_from_auxiliaries(
                 let is_legal = |offset: &Offset| -> bool {
                     nonintersectionkey.abuse_this_datastructure_for_in_bounds_check(0, offset)
                 };
-                let neighbors = dfs_general(&beginning_offset, &is_legal);
+                let neighbors = dfs_general(&beginning_offset, &is_legal).collect_vec();
                 if neighbors.contains(&goal_target_offsets[0]) {
                     let mut goal_blockstate = start_blockstate.clone();
                     goal_blockstate.goal_offsets.clone_from(goal_target_offsets);
