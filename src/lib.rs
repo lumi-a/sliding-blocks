@@ -2,6 +2,7 @@ pub mod examples;
 
 use bitvec::prelude::*;
 use itertools::Itertools;
+use rustc_hash::FxHashSet;
 use std::cmp::{max, min, Ordering};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use wasm_bindgen::prelude::*;
@@ -14,10 +15,6 @@ type Height = Coor;
 struct Point(Coor, Coor);
 // A "global" coordinate, in contrast to the Offset of a Shape
 impl Point {
-    // TODO: It'd be nice to have this using std::ops::Add, std::ops::Sub,
-    // but those seem to kinda consume ownership? There are ways to avoid that,
-    // I hear, but I don't know enough about ownership yet to understand those,
-    // sorry.
     fn add(&self, other: &Point) -> Point {
         Point(self.0 + other.0, self.1 + other.1)
     }
@@ -40,8 +37,7 @@ type ReconstructionMap = HashMap<(Shape, Offset), char>;
 
 type Shape = BTreeSet<Point>; // nonempty. min-x == 0, min-y == 0
 
-// TODO: Make this a struct method?
-fn get_extremes(coordinates_set: &Points) -> (Point, Point) {
+fn get_points_dimensions(coordinates_set: &Points) -> (Point, Point) {
     // Extract min-x and min-y.
     // Assumes that coordinatesSet is nonempty.
     let mut min_x = Coor::MAX;
@@ -163,15 +159,12 @@ fn build_nonintersectionkey(
     width: Width,
     height: Height,
 ) -> Nonintersectionkey {
-    // TODO: This can be done faster by first storing the relative offsets for which the
-    // nik is true, and then filling in the actual nik.
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
     struct RelativeOffset(isize, isize); // (isize, isize) because Coor is too small and I want negatives
     let mut relative_nik: HashMap<(usize, usize, RelativeOffset), bool> = HashMap::new();
     let mut inbounds: HashMap<(usize, Offset), bool> = HashMap::new();
 
     // Brace yourselves
-
     let mut nikvec: ShapevecForNik<Vec<ShapevecForNik<BitVec>>> = Vec::new();
     for (shape_ix_a, shape_a) in shapekey.iter().enumerate() {
         let mut nik_a: Vec<ShapevecForNik<BitVec>> = Vec::new();
@@ -228,13 +221,12 @@ fn build_nonintersectionkey(
     }
 }
 
-// TODO: I have no idea if `&dyn Fn(Offset) -> bool` is the right signature as I didn't learn about `&dyn` yet
 fn dfs_general(
     initial_offset: &Offset,
     is_legal: &dyn Fn(&Offset) -> bool,
 ) -> impl Iterator<Item = Offset> {
     let mut legal_offsets: Vec<Offset> = Vec::new();
-    let mut seen_offsets: BTreeSet<Offset> = BTreeSet::new(); // TODO: Different data structures?
+    let mut seen_offsets: FxHashSet<Offset> = Default::default(); // TODO: Different data structures?
     seen_offsets.insert(initial_offset.clone());
 
     // To eliminate backtracking:
@@ -287,7 +279,7 @@ fn dfs_general(
         } {
             // TODO: Can we check seen_offsets membership without cloning?
             // TODO: Which of these checks is faster? And shouldn't we be using pathfinding::directed::dfs::dfs instead?
-            if is_legal(&new_offset) && seen_offsets.insert(new_offset.clone()) {
+            if seen_offsets.insert(new_offset.clone()) && is_legal(&new_offset) {
                 legal_offsets.push(new_offset.clone());
                 stack.push((new_offset, new_dir));
             }
@@ -648,7 +640,7 @@ fn preprocess_proper_puzzle(
             continue;
         }
 
-        let (shape_min, _) = get_extremes(start_points);
+        let (shape_min, _) = get_points_dimensions(start_points);
         let shape: Shape = start_points
             .iter()
             .map(|point| point.sub(&shape_min))
@@ -664,7 +656,7 @@ fn preprocess_proper_puzzle(
         reconstruction_map.insert((shape, (&shape_min).into()), *c);
 
         if let Some(goal_points) = goal_chartopoints.get(c) {
-            let (target_min, _) = get_extremes(goal_points);
+            let (target_min, _) = get_points_dimensions(goal_points);
             goal_chars_startoffset_targetoffset.push((
                 *c,
                 (&shape_min).into(),
@@ -678,7 +670,7 @@ fn preprocess_proper_puzzle(
         if c == &BOUNDS_CHAR {
             continue;
         }
-        let (shape_min, _) = get_extremes(goal_points);
+        let (shape_min, _) = get_points_dimensions(goal_points);
         let shape: Shape = goal_points
             .iter()
             .map(|point| point.sub(&shape_min))
@@ -1017,8 +1009,8 @@ pub fn solve_puzzle(start: &str, goal: &str) -> Result<Option<Vec<String>>, Solv
                 let reconstruction_map_to_string = |rm: &ReconstructionMap| -> String {
                     let mut board: Vec<Vec<char>> =
                         vec![vec![' '; width as usize]; height as usize];
-                    for offset in &bounds {
-                        board[(offset.1 - 1) as usize][(offset.0 - 1) as usize] = BOUNDS_CHAR;
+                    for point in &bounds {
+                        board[(point.1 - 1) as usize][(point.0 - 1) as usize] = BOUNDS_CHAR;
                     }
 
                     for ((shape, offset), c) in rm.iter() {
