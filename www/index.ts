@@ -199,12 +199,12 @@ class Block {
             }
             if (walking_offsets.length === 1) {
                 const offy = this.walking_offsets[0]
-                this.path.style.transform = `translate(${x(offy)}px, ${y(offy)}px)`
+                this.path.setAttribute('transform', `translate(${x(offy)} ${y(offy)})`)
             } else {
                 const lambda = new_offsets_time % 1
                 const from = this.walking_offsets[Math.ceil(new_offsets_time)]
                 const to = this.walking_offsets[Math.floor(new_offsets_time)]
-                this.path.style.transform = `translate(${lambda * x(from) + (1 - lambda) * x(to)}px, ${lambda * y(from) + (1 - lambda) * y(to)}px)`
+                this.path.setAttribute('transform', `translate(${lambda * x(from) + (1 - lambda) * x(to)} ${lambda * y(from) + (1 - lambda) * y(to)})`)
             }
         }
     }
@@ -216,6 +216,7 @@ class Block {
         path.setAttribute("d", shape_to_path(this.shape, this.char === BOUNDS_CHAR ? -inset : inset))
         path.setAttribute("fill-rule", "evenodd")
         path.setAttribute("stroke", char_to_color(this.char, 0.25))
+        path.setAttribute("stroke-width", "0.025")
         if (this.char !== BOUNDS_CHAR) {
             const pattern_id = `block-pattern-${this.char}`
             path.setAttribute("fill", `url(#${pattern_id})`)

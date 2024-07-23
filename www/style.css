@@ -96,10 +96,6 @@ header {
     max-height: calc(100vh - 2em);
 }
 
-#svg-puzzle>path {
-    stroke-width: 0.025;
-}
-
 #svg-puzzle>path.dragging {
     filter: contrast(1.5);
 }
