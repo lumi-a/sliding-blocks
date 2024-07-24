@@ -971,13 +971,9 @@ fn solution_from_auxiliaries(
                 justmoved: Justmoved::Nothing,
             },
             |blockstate| {
-                // TODO: There are more performant solutions than calling into_iter here,
-                // but they require a ton of refactoring and code-duplication and everything
-                // will be very ugly.
                 get_neighboring_blockstates(blockstate, nonintersectionkey, goal_shapekey_key)
                     .into_iter()
                     .map(|blockstate| (blockstate, 1))
-                    .collect_vec()
             },
             |BlockstateJustmoved { blockstate, .. }| {
                 misplaced_goalblocks_heuristic(blockstate, goal_target_offsets)
