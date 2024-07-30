@@ -1,3 +1,15 @@
+//! Solving sliding-block puzzles like the [`ones from the Professor Layton games`]
+//!
+//! [`ones from the Professor Layton games`](https://layton.fandom.com/wiki/Category:Sliding)
+
+#![warn(
+    clippy::all,
+    clippy::restriction,
+    clippy::pedantic,
+    clippy::nursery,
+    clippy::cargo
+)]
+
 pub mod examples;
 
 use bitvec::prelude::*;
@@ -401,12 +413,12 @@ fn get_neighboring_blockstates(
         )
     }
 
-    fn dfs_goal<'a>(
-        moving: impl Iterator<Item = (usize, &'a Offset)> + 'a,
-        blockstate: &'a Blockstate,
-        nonintersectionkey: &'a Nonintersectionkey,
-        goal_shapekey_key: &'a GoalShapekeyKey,
-    ) -> impl Iterator<Item = BlockstateJustmoved> + 'a {
+    fn dfs_goal<'args>(
+        moving: impl Iterator<Item = (usize, &'args Offset)> + 'args,
+        blockstate: &'args Blockstate,
+        nonintersectionkey: &'args Nonintersectionkey,
+        goal_shapekey_key: &'args GoalShapekeyKey,
+    ) -> impl Iterator<Item = BlockstateJustmoved> + 'args {
         moving.flat_map(move |(moving_goalvec_ix, moving_offset)| {
             let moving_shape_ix = goal_shapekey_key[moving_goalvec_ix];
             let is_legal = |offsety: &Offset| -> bool {

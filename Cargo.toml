@@ -2,6 +2,12 @@
 name = "sliding-blocks"
 version = "0.1.0"
 edition = "2021"
+keywords = ["puzzle", "sliding-blocks", "puzzle-solver", "game"]
+categories = ["games"]
+repository = "https://github.com/lumi-a/sliding-blocks"
+authors = ["lumi-a"]
+description = "Solver for sliding-block puzzles"
+license = "MIT OR Apache-2.0"
 
 [dependencies]
 bitvec = "1.0.1"

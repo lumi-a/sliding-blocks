@@ -40,47 +40,47 @@ impl std::convert::From<Puzzle> for JsPuzzle {
 pub const ALL_EXAMPLES: [Puzzle; 6] = [
     Puzzle {
         name: "Ten-Step Solution",
-        start: r#"  
+        start: "  
       A  
     11.  
     .22. 
     .33. 
      .44 
      B   
-    "#,
-        goal: r#"  
+    ",
+        goal: "  
       B  
     ...  
     .... 
     .... 
      ... 
      A 
-    "#,
+    ",
         min_moves: 10,
     },
     Puzzle {
         name: "Four Balls",
-        start: r#"
+        start: "
         A
     B|.--
      |##.
      .##I
      ==.ID
      C
-    "#,
-        goal: r#"
+    ",
+        goal: "
         C
     D....
      ....
      ....
      ....B
      A
-    "#,
+    ",
         min_moves: 28,
     },
     Puzzle {
         name: "The Elevator Switch",
-        start: r#"
+        start: "
        AA   
        AA   
     ...a....
@@ -90,8 +90,8 @@ pub const ALL_EXAMPLES: [Puzzle; 6] = [
     ....d...
        BB
        BB
-    "#,
-        goal: r#"
+    ",
+        goal: "
        BB   
        BB   
     ........
@@ -101,12 +101,12 @@ pub const ALL_EXAMPLES: [Puzzle; 6] = [
     ........
        AA
        AA
-    "#,
+    ",
         min_moves: 12,
     },
     Puzzle {
         name: "Garbage Disposal",
-        start: r#"
+        start: "
       tt
       tt
     ......
@@ -115,8 +115,8 @@ pub const ALL_EXAMPLES: [Puzzle; 6] = [
      yygg
       bb
       ..
-    "#,
-        goal: r#"
+    ",
+        goal: "
       ..
       ..
     ......
@@ -125,12 +125,12 @@ pub const ALL_EXAMPLES: [Puzzle; 6] = [
      ....
       tt
       tt
-    "#,
+    ",
         min_moves: 31,
     },
     Puzzle {
         name: "The Diabolical Box",
-        start: r#"
+        start: "
       ##    
       ##    
      +..L.  
@@ -140,8 +140,8 @@ pub const ALL_EXAMPLES: [Puzzle; 6] = [
      .^|r.  
       ..    
       ..
-    "#,
-        goal: r#"
+    ",
+        goal: "
       ..
       ..   
      .....  
@@ -151,23 +151,23 @@ pub const ALL_EXAMPLES: [Puzzle; 6] = [
      .....  
       ##    
       ##
-    "#,
+    ",
         min_moves: 78,
     },
     Puzzle {
         name: "Royal Escape",
-        start: r#"
+        start: "
     --==+
     ##|/.
     ##|*.
     __mm$
-    "#,
-        goal: r#"
+    ",
+        goal: "
     .....
     ...##
     ...##
     .....
-    "#,
+    ",
         min_moves: 81,
     },
 ];
