@@ -1,9 +1,11 @@
+use core::convert::From;
 use wasm_bindgen::prelude::*;
 
 // TODO: Perhaps conflate JsPuzzle and Puzzle by using Cow
 
 #[wasm_bindgen(getter_with_clone)]
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct JsPuzzle {
     pub name: String,
     pub start: String,
@@ -12,7 +14,9 @@ pub struct JsPuzzle {
 }
 
 #[wasm_bindgen]
-pub fn get_all_js_examples() -> Vec<JsPuzzle> {
+#[must_use]
+#[inline]
+pub fn js_get_all() -> Vec<JsPuzzle> {
     ALL_EXAMPLES
         .iter()
         .map(|puzzle| puzzle.clone().into())
@@ -20,18 +24,20 @@ pub fn get_all_js_examples() -> Vec<JsPuzzle> {
 }
 
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct Puzzle {
     pub name: &'static str,
     pub start: &'static str,
     pub goal: &'static str,
     pub min_moves: usize,
 }
-impl std::convert::From<Puzzle> for JsPuzzle {
+impl From<Puzzle> for JsPuzzle {
+    #[inline]
     fn from(puzzle: Puzzle) -> Self {
         Self {
-            name: puzzle.name.to_string(),
-            start: puzzle.start.to_string(),
-            goal: puzzle.goal.to_string(),
+            name: puzzle.name.to_owned(),
+            start: puzzle.start.to_owned(),
+            goal: puzzle.goal.to_owned(),
             min_moves: puzzle.min_moves,
         }
     }

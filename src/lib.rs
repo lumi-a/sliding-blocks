@@ -9,18 +9,28 @@
     clippy::nursery,
     clippy::cargo
 )]
+#![allow(
+    clippy::implicit_return,
+    clippy::mem_forget, // Otherwise exported wasm-functions complain
+    clippy::std_instead_of_alloc,
+)]
 
 pub mod examples;
 
 use bitvec::prelude::*;
+use core::cmp::{max, min, Ordering};
 use itertools::Itertools;
-use std::cmp::{max, min, Ordering};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use vec_collections::{AbstractVecSet, VecSet};
 use wasm_bindgen::prelude::*;
 
-type Coor = u8; // If changing this type, also change the type of Offset
+/// Type of a single coordinate. If changing this type, also change the type of Offset.
+type Coor = u8;
+
+/// Alias for Coor, for readability.
 type Width = Coor;
+
+/// Alias for Coor, for readability.
 type Height = Coor;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -363,12 +373,12 @@ fn get_neighboring_blockstates(
     // TODO: This is quite ugly, taking in a reference to the other offsets
     // for _every_ offset. The only reason we do this is to filter out
     // in case of BlockstateJustmoved::nongoal.
-    fn dfs_nongoal<'a>(
-        moving: impl Iterator<Item = (usize, Offset, &'a Offsets)> + 'a,
-        blockstate: &'a Blockstate,
-        nonintersectionkey: &'a Nonintersectionkey,
-        goal_shapekey_key: &'a GoalShapekeyKey,
-    ) -> impl Iterator<Item = BlockstateJustmoved> + 'a {
+    fn dfs_nongoal<'args>(
+        moving: impl Iterator<Item = (usize, Offset, &'args Offsets)> + 'args,
+        blockstate: &'args Blockstate,
+        nonintersectionkey: &'args Nonintersectionkey,
+        goal_shapekey_key: &'args GoalShapekeyKey,
+    ) -> impl Iterator<Item = BlockstateJustmoved> + 'args {
         moving.flat_map(
             move |(moving_shape_ix, moving_offset, offsets_with_same_shape_ix)| {
                 let mut trimmed_movingshape_offsets = offsets_with_same_shape_ix.clone();
