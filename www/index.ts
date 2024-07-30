@@ -642,7 +642,7 @@ puzzle_solve_btn.addEventListener("click", e => {
     const goal_string = puzzle_textarea_goal.value
     let solution
     computation_animation.classList.remove("invisible")
-    setTimeout(() => {
+    setTimeout(() => {  // Sigh, otherwise the animation doesn't show
         try {
             solution = solve_puzzle(start_string, goal_string)
             if (solution === undefined) {
@@ -662,7 +662,7 @@ puzzle_solve_btn.addEventListener("click", e => {
             error_msg_span.textContent = e.toString()
         }
         computation_animation.classList.add("invisible")
-    }, 10) // Sigh, otherwise the animation doesn't show
+    }, 20)
 })
 
 const puzzle_selection = document.getElementById("puzzle-selection") as HTMLSelectElement

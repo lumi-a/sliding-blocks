@@ -1,7 +1,10 @@
 use sliding_blocks::examples::ALL_EXAMPLES;
 use sliding_blocks::{solve_puzzle, solve_puzzle_minmoves, SolvePuzzleError};
 
+use wasm_bindgen_test::*;
+
 #[test]
+#[wasm_bindgen_test]
 fn test_examples() {
     for puzzle in ALL_EXAMPLES {
         assert_eq!(
@@ -12,6 +15,7 @@ fn test_examples() {
 }
 
 #[test]
+#[wasm_bindgen_test]
 fn test_edgecases() {
     // Puzzle with exactly one block, which is a non-goalblock
     assert_eq!(

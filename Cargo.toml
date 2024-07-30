@@ -16,6 +16,7 @@ crate-type = ["cdylib","rlib"]
 
 [dev-dependencies]
 criterion = "0.3"
+wasm-bindgen-test = "0.3"
 
 [[bench]]
 name = "example"
