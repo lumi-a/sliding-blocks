@@ -52,8 +52,8 @@ impl Sub for Point {
         Self(self.0 - other.0, self.1 - other.1)
     }
 }
-impl From<&Offset> for Point {
-    fn from(offset: &Offset) -> Self {
+impl From<Offset> for Point {
+    fn from(offset: Offset) -> Self {
         Self(offset.x(), offset.y())
     }
 }
@@ -63,8 +63,8 @@ impl From<&Offset> for Point {
 type Points = BTreeSet<Point>;
 
 /// Shift a collection of points by an `Offset`.
-fn shift_points(points: &Points, offset: &Offset) -> Points {
-    points.iter().map(|p| *p + (offset.into())).collect()
+fn shift_points(points: &Points, offset: Offset) -> Points {
+    points.iter().map(|point| *point + offset.into()).collect()
 }
 
 /// A map from a `char` to the cells it occupies. Used in pre-processing.
@@ -317,7 +317,7 @@ fn build_nonintersectionkey(
                 let mut nik_a_xy: ShapevecForNik<BitVec> = ShapevecForNik::new();
 
                 let shift_a = Offset::new(xa, ya);
-                let shifted_a: Points = shift_points(shape_a, &shift_a);
+                let shifted_a: Points = shift_points(shape_a, shift_a);
                 if shifted_a.is_subset(bounds) {
                     // Let the fun begin
                     for (shape_ix_b, shape_b) in shapekey.iter().enumerate() {
@@ -333,11 +333,11 @@ fn build_nonintersectionkey(
                                     *relative_nik
                                         .entry((shape_ix_a, shape_ix_b, relative_offset))
                                         .or_insert({
-                                            let shifted_b: Points = shift_points(shape_b, &shift_b);
+                                            let shifted_b: Points = shift_points(shape_b, shift_b);
                                             shifted_b.is_disjoint(&shifted_a)
                                         })
                                         && *inbounds.entry((shape_ix_b, shift_b)).or_insert({
-                                            let shifted_b: Points = shift_points(shape_b, &shift_b);
+                                            let shifted_b: Points = shift_points(shape_b, shift_b);
                                             shifted_b.is_subset(bounds)
                                         }),
                                 );
@@ -651,14 +651,14 @@ fn _print_puzzle(
     let mut blocks: Vec<Points> = Vec::new();
     for (shape, offsets) in shapekey.iter().zip(blockstate.nongoal_offsets.iter()) {
         for offset in offsets.iter() {
-            let block: Points = shift_points(shape, &offset);
+            let block: Points = shift_points(shape, *offset);
             blocks.push(block);
         }
     }
     for (shape_ix, offset) in goal_shapekey_key.iter().zip(blockstate.goal_offsets.iter()) {
         let block: Points = shapekey[*shape_ix]
             .iter()
-            .map(|p| *p + (offset.into()))
+            .map(|p| *p + (*offset).into())
             .collect();
         blocks.push(block);
     }
