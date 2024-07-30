@@ -19,6 +19,7 @@ pub mod examples;
 
 use bitvec::prelude::*;
 use core::cmp::{max, min, Ordering};
+use core::ops::{Add, Sub};
 use itertools::Itertools;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use vec_collections::{AbstractVecSet, VecSet};
@@ -33,17 +34,22 @@ type Width = Coor;
 /// Alias for Coor, for readability.
 type Height = Coor;
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+/// A "global" coordinate, in contrast to the Offset of a Shape.
+/// Over time, these two types diverged a lot, for what I hope (but
+/// don't believe) to be good reasons. I might implement Point
+/// as a wrapper around Offset at some point. (TODO)
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Copy)]
 struct Point(Coor, Coor);
-// A "global" coordinate, in contrast to the Offset of a Shape.
-// Over time, these two types diverged a lot, for what I hope (but
-// don't believe) to be good reasons.
-impl Point {
-    fn add(&self, other: &Point) -> Point {
-        Point(self.0 + other.0, self.1 + other.1)
+impl Add for Point {
+    type Output = Self;
+    fn add(self, other: Self) -> Self {
+        Self(self.0 + other.0, self.1 + other.1)
     }
-    fn sub(&self, other: &Point) -> Point {
-        Point(self.0 - other.0, self.1 - other.1)
+}
+impl Sub for Point {
+    type Output = Self;
+    fn sub(self, other: Self) -> Self {
+        Self(self.0 - other.0, self.1 - other.1)
     }
 }
 impl From<&Offset> for Point {
@@ -52,15 +58,30 @@ impl From<&Offset> for Point {
     }
 }
 
+/// A collection of Points. It's a BTreeSet rather than any
+/// other set, to implement Ord.
 type Points = BTreeSet<Point>;
+
+/// Shift a collection of points by an offset.
 fn shift_points(points: &Points, offset: &Offset) -> Points {
-    points.iter().map(|p| p.add(&offset.into())).collect()
+    points.iter().map(|p| *p + (offset.into())).collect()
 }
+
+/// A map from a char to the cells it occupies. Used in pre-processing.
 type CharToPoints = BTreeMap<char, Points>;
+
+/// A map from a given shape and its offset to its char. Used in mutable form
+/// for outputting the path the solution takes with the input-chars.
 type ReconstructionMap = HashMap<(Shape, Offset), char>;
 
-type Shape = BTreeSet<Point>; // nonempty. min-x == 0, min-y == 0
+/// A shape. This must not be empty.
+type Shape = BTreeSet<Point>;
 
+/// Type-alias for shape to describe bounds.
+/// Its minimum x-value and minimum y-value will always be 1.
+type Bounds = Shape;
+
+/// Extract the min/max x/y values from a collection of points.
 fn get_points_dimensions(coordinates_set: &Points) -> (Point, Point) {
     // Extract min-x and min-y.
     // Assumes that coordinatesSet is nonempty.
@@ -76,8 +97,13 @@ fn get_points_dimensions(coordinates_set: &Points) -> (Point, Point) {
     }
     (Point(min_x, min_y), Point(max_x, max_y))
 }
-type Bounds = Shape; // min-x == 1, min-y == 1.
 
+/// An offset (of a shape). We'll later assume that each shape has,
+/// as long as its in-bounds, a min-x-offset of at least 1, and
+/// min-y-offset of at least 1.
+///
+/// Implemented as a u16 to support fast hashing, addition, and
+/// other int-niceties.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Copy)]
 struct Offset(u16);
 impl Offset {
@@ -132,22 +158,86 @@ impl tinyset::Fits64 for Offset {
     }
 }
 
+/// A collection of offsets, used for storing
+/// offsets of the same shape in one blockstate.
+/// TODO: Experiment with the initial capacity.
 type Offsets = VecSet<[Offset; 16]>;
+
+/// The blockstates, stored as a tuple:
+/// - A Vec, each entry being a collection of non-goal-offsets.
+/// - A Vec, each entry being a goal-offset.
+/// By "non-goal-offset" we mean that the offset refers
+/// to a block that does not have a specified target-position.
+/// "goal-offsets" correspond to blocks with specified target-positions.
+///
+/// For an offset-collection in the nongoal_offsets (i.e. an entry in the
+/// nongoal_offsets vec), all blocks in that offset-collection
+/// have the same shape. This is the sole reason we store them
+/// as a *set*: If two non-goal-blocks are in interchangable
+/// positions, that defines equivalent blockstates.
+/// Depending on the puzzle, this can lead to considerable speedups.
+/// This cannot be applied to goal_offsets, as this won't lead
+/// to equivalent blockstates (in particular, two goal-blocks of
+/// the same shape might have different goal-positions, so a solved-blockstate
+/// would then be equivalent to a not-yet-solved-blockstate, i.e. we'd
+/// get messed up.)
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct Blockstate {
     nongoal_offsets: Vec<Offsets>,
     goal_offsets: Vec<Offset>,
 }
+
+/// Keeps track of shapes, for all Blockstates. Always has
+/// length at least nongoal_offsets.len(). All blocks corresponding
+/// to entry i in the nongoal_offsets vec have shape shapekey[i].
 type Shapekey = Vec<Shape>;
-type GoalShapekeyKey = Vec<usize>; // Given an index in the Blockstate.goal_blocks vec, what is the index of its shape in the shapekey vec?
-type GoalTargetOffsets = Vec<Offset>; // At what offset is a block in a goal-position?
 
-// Nonintersectionkey[ShapeA][CoordinatesA][ShapeB][CoordinatesB] == true iff:
-//   (ShapeA offset by CoordinatesA) ∩ (ShapeB offset by CoordinatesB) == ∅.
-// To save on memory, we always assume that (ShapeA offset by CoordinatesA) is in bounds.
-// This assumption will be satisfied when using the Nonintersectionkey in the algorithm.
+/// To also keep track of goal-block-shapes, we store what
+/// indices of Shapekey we should look them up in.
+/// If the shape of a goal-block is not shared with any
+/// non-goal-block, that shape is appended to the end of
+/// the shapekey.
+/// For a goal-block at entry i in goal_offsets, its shape
+/// is shapekey[goal_shapekeykey[i]].
+type GoalShapekeyKey = Vec<usize>;
 
+/// Stores the target-offsets each goal-block needs to reach.
+/// For a goal-block at entry i in goal_offsets, its target-offset
+/// is goal_target_offsets[i].
+type GoalTargetOffsets = Vec<Offset>;
+
+/// Type-alias to make the definition of Nonintersectionkey
+/// more readable.
 type ShapevecForNik<T> = Vec<T>;
+
+/// So that we not always have to check whether two blocks of
+/// two given shape and two given offsets intersect each other,
+/// we calculate all that in pre-processing and store it in
+/// what I called a Nonintersectionkey, a horrible name (TODO)
+/// Its width-attr keeps track
+/// of the width of the board, so that we don't have to index
+/// over x and y separately.
+/// Its nik attribute stores the values. For a block A of shape-index
+/// shape_a at offset (xa, ya) and a block B of shape-index shape_b at
+/// offset (xb, yb):
+/// - nik[shape_a][xa+ya*width] is a nonempty vec iff A is in-bounds,
+///   and if so:
+/// - nik[shape_a][xa+ya*width][shape_b][xb+yb*width] is true iff B
+///   is in-bounds and does not intersect A.
+///
+/// The first assumption saves on memory and will always be satisfied
+/// later on.
+/// Storing whether B is in-bounds here speeds up checks later and means
+/// we don't have to keep track of bounds that much, but it also means
+/// that we can't rely on Nonintersectionkey for in-bounds-checking if
+/// there is only a single block in the puzzle. But, of course, if there's
+/// only a single block, the puzzle is rather easy to solve.
+///
+/// We only allow indices (x,y) between (0,0) and (width+1, height+1). This
+/// is done to avoid checking for edge-cases where a block is right at the
+/// edge of the bounds, so that our addition doesn't overflow. It also
+/// means we have to let in-bounds-blocks have a min-offset of (1,1),
+/// which is only a mild inconvenience.
 #[cfg_attr(test, derive(PartialEq, Debug))]
 struct Nonintersectionkey {
     width: usize,
@@ -177,6 +267,7 @@ impl Nonintersectionkey {
     }
 }
 
+/// An error that can be returned by the solver.
 #[derive(Debug, PartialEq, Eq)]
 pub enum SolvePuzzleError {
     MismatchedBounds,
@@ -568,7 +659,7 @@ fn _print_puzzle(
     for (shape_ix, offset) in goal_shapekey_key.iter().zip(blockstate.goal_offsets.iter()) {
         let block: Points = shapekey[*shape_ix]
             .iter()
-            .map(|p| p.add(&offset.into()))
+            .map(|p| *p + (offset.into()))
             .collect();
         blocks.push(block);
     }
@@ -684,7 +775,7 @@ fn preprocess_proper_puzzle(
         let (shape_min, _) = get_points_dimensions(start_points);
         let shape: Shape = start_points
             .iter()
-            .map(|point| point.sub(&shape_min))
+            .map(|point| *point - shape_min)
             .collect();
 
         // This is only used to map goal-shapes to their indices in shapekey later
@@ -712,10 +803,7 @@ fn preprocess_proper_puzzle(
             continue;
         }
         let (shape_min, _) = get_points_dimensions(goal_points);
-        let shape: Shape = goal_points
-            .iter()
-            .map(|point| point.sub(&shape_min))
-            .collect();
+        let shape: Shape = goal_points.iter().map(|point| *point - shape_min).collect();
         char_to_goalshape.insert(*c, shape.clone());
     }
     // Check that the start and goal shapes are the same
