@@ -13,6 +13,7 @@
     clippy::implicit_return,
     clippy::mem_forget, // Otherwise exported wasm-functions complain
     clippy::std_instead_of_alloc,
+    clippy::arithmetic_side_effects,
 )]
 
 pub mod examples;
@@ -107,40 +108,49 @@ fn get_points_dimensions(coordinates_set: &Points) -> (Point, Point) {
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Copy)]
 struct Offset(u16);
 impl Offset {
+    /// Create an `Offset` from the given coordinates.
     #[inline]
     fn new(x: Coor, y: Coor) -> Self {
-        Self(((x as u16) << 8) | (y as u16))
+        Self(((u16::from(x)) << 8) | u16::from(y))
     }
+    /// Extract x-coordinate from self.
     #[inline]
-    fn x(&self) -> Coor {
+    fn x(self) -> Coor {
         (self.0 >> 8) as Coor
     }
+    /// Extract y-coordinate from self.
     #[inline]
-    fn y(&self) -> Coor {
+    fn y(self) -> Coor {
         (self.0 & 0xff) as Coor
     }
+    /// Extract x-coordinate from self as usize.
     #[inline]
-    fn x_usize(&self) -> usize {
+    fn x_usize(self) -> usize {
         (self.0 >> 8) as usize
     }
+    /// Extract y-coordinate from self as usize.
     #[inline]
-    fn y_usize(&self) -> usize {
+    fn y_usize(self) -> usize {
         (self.0 & 0xff) as usize
     }
+    /// Return new offset shifted up by one cell.
     #[inline]
-    fn up(&self) -> Self {
+    fn up(self) -> Self {
         Self(self.0 + 1)
     }
+    /// Return new offset shifted down by one cell.
     #[inline]
-    fn down(&self) -> Self {
+    fn down(self) -> Self {
         Self(self.0 - 1)
     }
+    /// Return new offset shifted left by one cell.
     #[inline]
-    fn left(&self) -> Self {
+    fn left(self) -> Self {
         Self(self.0 - 0x100)
     }
+    /// Return new offset shifted right by one cell.
     #[inline]
-    fn right(&self) -> Self {
+    fn right(self) -> Self {
         Self(self.0 + 0x100)
     }
 }
