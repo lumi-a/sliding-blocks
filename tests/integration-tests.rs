@@ -1,6 +1,5 @@
 use sliding_blocks::examples::ALL_EXAMPLES;
 use sliding_blocks::{solve_puzzle, solve_puzzle_minmoves, SolvePuzzleError};
-
 use wasm_bindgen_test::*;
 
 #[test]

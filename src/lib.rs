@@ -4,7 +4,7 @@ use bitvec::prelude::*;
 use itertools::Itertools;
 use std::cmp::{max, min, Ordering};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
-use tinyset::Set64;
+use vec_collections::{AbstractVecSet, VecSet};
 use wasm_bindgen::prelude::*;
 
 type Coor = u8; // If changing this type, also change the type of Offset
@@ -110,7 +110,7 @@ impl tinyset::Fits64 for Offset {
     }
 }
 
-type Offsets = Set64<Offset>;
+type Offsets = VecSet<[Offset; 16]>;
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct Blockstate {
     nongoal_offsets: Vec<Offsets>,
@@ -254,7 +254,7 @@ fn dfs_general(
     is_legal: &dyn Fn(&Offset) -> bool,
 ) -> impl Iterator<Item = Offset> {
     let mut legal_offsets: Vec<Offset> = Vec::new();
-    let mut seen_offsets: Set64<Offset> = Default::default();
+    let mut seen_offsets: VecSet<[Offset; 8]> = VecSet::empty();
     seen_offsets.insert(*initial_offset);
 
     // To eliminate backtracking:
@@ -367,7 +367,7 @@ fn get_neighboring_blockstates(
                             continue;
                         }
                         for offset in shape_offsets.iter() {
-                            if !nonintersectionkey[(shape_ix, &offset, moving_shape_ix, offsety)] {
+                            if !nonintersectionkey[(shape_ix, offset, moving_shape_ix, offsety)] {
                                 return false;
                             }
                         }
@@ -379,7 +379,7 @@ fn get_neighboring_blockstates(
                         }
                     }
                     for offset in trimmed_movingshape_offsets.iter() {
-                        if !nonintersectionkey[(moving_shape_ix, &offset, moving_shape_ix, offsety)]
+                        if !nonintersectionkey[(moving_shape_ix, offset, moving_shape_ix, offsety)]
                         {
                             return false;
                         }
@@ -412,7 +412,7 @@ fn get_neighboring_blockstates(
             let is_legal = |offsety: &Offset| -> bool {
                 for (shape_ix, shape_offsets) in blockstate.nongoal_offsets.iter().enumerate() {
                     for offset in shape_offsets.iter() {
-                        if !nonintersectionkey[(shape_ix, &offset, moving_shape_ix, offsety)] {
+                        if !nonintersectionkey[(shape_ix, offset, moving_shape_ix, offsety)] {
                             return false;
                         }
                     }
@@ -466,9 +466,9 @@ fn get_neighboring_blockstates(
                                 // Can we do better?
                                 // And do we even need to? Branch-predictor should do some solid work here,
                                 // and these checks really are cheap.
-                                shape_ix != *justmoved_shape_ix || *offset != *justmoved_offset
+                                shape_ix != *justmoved_shape_ix || **offset != *justmoved_offset
                             })
-                            .map(move |offset| (shape_ix, offset, offsets))
+                            .map(move |offset| (shape_ix, *offset, offsets))
                     }),
                 blockstate,
                 nonintersectionkey,
@@ -494,7 +494,7 @@ fn get_neighboring_blockstates(
                     .flat_map(|(shape_ix, offsets)| {
                         offsets
                             .iter()
-                            .map(move |offset| (shape_ix, offset, offsets))
+                            .map(move |offset| (shape_ix, *offset, offsets))
                     }),
                 blockstate,
                 nonintersectionkey,
@@ -516,7 +516,7 @@ fn get_neighboring_blockstates(
                     .flat_map(|(shape_ix, offsets)| {
                         offsets
                             .iter()
-                            .map(move |offset| (shape_ix, offset, offsets))
+                            .map(move |offset| (shape_ix, *offset, offsets))
                     }),
                 blockstate,
                 nonintersectionkey,
@@ -1062,10 +1062,10 @@ pub fn solve_puzzle(start: &str, goal: &str) -> Result<Option<Vec<String>>, Solv
                                 let shape = &shapekey[shape_ix];
 
                                 let c = reconstruction_map
-                                    .remove(&(shape.clone(), old_offset))
+                                    .remove(&(shape.clone(), *old_offset))
                                     .unwrap();
 
-                                reconstruction_map.insert((shape.clone(), new_offset), c);
+                                reconstruction_map.insert((shape.clone(), *new_offset), c);
 
                                 break 'check_single_block;
                             }
