@@ -25,19 +25,19 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use vec_collections::{AbstractVecSet, VecSet};
 use wasm_bindgen::prelude::*;
 
-/// Type of a single coordinate. If changing this type, also change the type of Offset.
+/// Type of a single coordinate. If changing this type, also change the type of `Offset`.
 type Coor = u8;
 
-/// Alias for Coor, for readability.
+/// Alias for `Coor`, for readability.
 type Width = Coor;
 
-/// Alias for Coor, for readability.
+/// Alias for `Coor`, for readability.
 type Height = Coor;
 
-/// A "global" coordinate, in contrast to the Offset of a Shape.
+/// A "global" coordinate, in contrast to the `Offset` of a `Shape`.
 /// Over time, these two types diverged a lot, for what I hope (but
-/// don't believe) to be good reasons. I might implement Point
-/// as a wrapper around Offset at some point. (TODO)
+/// don't believe) to be good reasons. I might implement `Point`
+/// as a wrapper around `Offset` at some point. (TODO)
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Copy)]
 struct Point(Coor, Coor);
 impl Add for Point {
@@ -58,30 +58,30 @@ impl From<&Offset> for Point {
     }
 }
 
-/// A collection of Points. It's a BTreeSet rather than any
-/// other set, to implement Ord.
+/// A collection of Points. It's a `BTreeSet` rather than any
+/// other set, to implement `Ord`.
 type Points = BTreeSet<Point>;
 
-/// Shift a collection of points by an offset.
+/// Shift a collection of points by an `Offset`.
 fn shift_points(points: &Points, offset: &Offset) -> Points {
     points.iter().map(|p| *p + (offset.into())).collect()
 }
 
-/// A map from a char to the cells it occupies. Used in pre-processing.
+/// A map from a `char` to the cells it occupies. Used in pre-processing.
 type CharToPoints = BTreeMap<char, Points>;
 
-/// A map from a given shape and its offset to its char. Used in mutable form
-/// for outputting the path the solution takes with the input-chars.
+/// A map from a given `Shape` and its `Offset` to its `char`. Used in mutable form
+/// for outputting the path the solution takes with the input-`char`s.
 type ReconstructionMap = HashMap<(Shape, Offset), char>;
 
 /// A shape. This must not be empty.
 type Shape = BTreeSet<Point>;
 
-/// Type-alias for shape to describe bounds.
+/// Type-alias for `Shape` to describe bounds.
 /// Its minimum x-value and minimum y-value will always be 1.
 type Bounds = Shape;
 
-/// Extract the min/max x/y values from a collection of points.
+/// Extract the min/max x/y values from `Points`.
 fn get_points_dimensions(coordinates_set: &Points) -> (Point, Point) {
     // Extract min-x and min-y.
     // Assumes that coordinatesSet is nonempty.
@@ -102,7 +102,7 @@ fn get_points_dimensions(coordinates_set: &Points) -> (Point, Point) {
 /// as long as its in-bounds, a min-x-offset of at least 1, and
 /// min-y-offset of at least 1.
 ///
-/// Implemented as a u16 to support fast hashing, addition, and
+/// Implemented as a `u16` to support fast hashing, addition, and
 /// other int-niceties.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Copy)]
 struct Offset(u16);
@@ -158,14 +158,14 @@ impl tinyset::Fits64 for Offset {
     }
 }
 
-/// A collection of offsets, used for storing
+/// A collection of `Offset`s, used for storing
 /// offsets of the same shape in one blockstate.
 /// TODO: Experiment with the initial capacity.
 type Offsets = VecSet<[Offset; 16]>;
 
 /// The blockstates, stored as a tuple:
-/// - A Vec, each entry being a collection of non-goal-offsets.
-/// - A Vec, each entry being a goal-offset.
+/// - A `Vec`, each entry being a collection of non-goal-`Offsets`.
+/// - A `Vec`, each entry being a goal-`Offset`.
 /// By "non-goal-offset" we mean that the offset refers
 /// to a block that does not have a specified target-position.
 /// "goal-offsets" correspond to blocks with specified target-positions.
@@ -187,26 +187,26 @@ struct Blockstate {
     goal_offsets: Vec<Offset>,
 }
 
-/// Keeps track of shapes, for all Blockstates. Always has
-/// length at least nongoal_offsets.len(). All blocks corresponding
-/// to entry i in the nongoal_offsets vec have shape shapekey[i].
+/// Keeps track of shapes, for all `Blockstate`s. Always has
+/// length at least `nongoal_offsets.len()`. All blocks corresponding
+/// to entry `i` in `nongoal_offsets`have shape `shapekey[i]`.
 type Shapekey = Vec<Shape>;
 
 /// To also keep track of goal-block-shapes, we store what
-/// indices of Shapekey we should look them up in.
+/// indices of `Shapekey` we should look them up in.
 /// If the shape of a goal-block is not shared with any
 /// non-goal-block, that shape is appended to the end of
 /// the shapekey.
-/// For a goal-block at entry i in goal_offsets, its shape
-/// is shapekey[goal_shapekeykey[i]].
+/// For a goal-block at entry `i` in `goal_offsets`, its shape
+/// is `shapekey[goal_shapekeykey[i]]`.
 type GoalShapekeyKey = Vec<usize>;
 
 /// Stores the target-offsets each goal-block needs to reach.
-/// For a goal-block at entry i in goal_offsets, its target-offset
-/// is goal_target_offsets[i].
+/// For a goal-block at entry `i` in `goal_offsets`, its target-offset
+/// is `goal_target_offsets[i]`.
 type GoalTargetOffsets = Vec<Offset>;
 
-/// Type-alias to make the definition of Nonintersectionkey
+/// Type-alias to make the definition of `Nonintersectionkey`
 /// more readable.
 type ShapevecForNik<T> = Vec<T>;
 
@@ -214,15 +214,14 @@ type ShapevecForNik<T> = Vec<T>;
 /// two given shape and two given offsets intersect each other,
 /// we calculate all that in pre-processing and store it in
 /// what I called a Nonintersectionkey, a horrible name (TODO)
-/// Its width-attr keeps track
-/// of the width of the board, so that we don't have to index
-/// over x and y separately.
-/// Its nik attribute stores the values. For a block A of shape-index
-/// shape_a at offset (xa, ya) and a block B of shape-index shape_b at
-/// offset (xb, yb):
-/// - nik[shape_a][xa+ya*width] is a nonempty vec iff A is in-bounds,
+/// Its `width` keeps track of the width of the board, so that we
+/// don't have to index over x and y separately.
+/// Its `nik` attribute stores the values. For a block A of shape-index
+/// `shape_a` at offset `(xa, ya)` and a block B of shape-index `shape_b` at
+/// offset `(xb, yb)`:
+/// - `nik[shape_a][xa+ya*width]` is a nonempty vec iff A is in-bounds,
 ///   and if so:
-/// - nik[shape_a][xa+ya*width][shape_b][xb+yb*width] is true iff B
+/// - `nik[shape_a][xa+ya*width][shape_b][xb+yb*width]` is true iff B
 ///   is in-bounds and does not intersect A.
 ///
 /// The first assumption saves on memory and will always be satisfied
@@ -233,10 +232,10 @@ type ShapevecForNik<T> = Vec<T>;
 /// there is only a single block in the puzzle. But, of course, if there's
 /// only a single block, the puzzle is rather easy to solve.
 ///
-/// We only allow indices (x,y) between (0,0) and (width+1, height+1). This
-/// is done to avoid checking for edge-cases where a block is right at the
+/// We only allow indices `(x,y)` between `(0,0)` and `(width+1, height+1)`.
+/// This is done to avoid checking for edge-cases where a block is right at the
 /// edge of the bounds, so that our addition doesn't overflow. It also
-/// means we have to let in-bounds-blocks have a min-offset of (1,1),
+/// means we have to let in-bounds-blocks have a min-offset of `(1,1)`,
 /// which is only a mild inconvenience.
 #[cfg_attr(test, derive(PartialEq, Debug))]
 struct Nonintersectionkey {
