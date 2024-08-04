@@ -19,7 +19,6 @@
     clippy::integer_division,
     clippy::missing_assert_message,
     clippy::missing_asserts_for_indexing,
-    clippy::missing_docs_in_private_items,
     clippy::missing_inline_in_public_items,
     clippy::multiple_inherent_impl,
     clippy::print_stdout,
@@ -138,42 +137,42 @@ impl Offset {
     }
     /// Extract x-coordinate from self.
     #[inline]
-    fn x(self) -> Coor {
+    const fn x(self) -> Coor {
         (self.0 >> 8) as Coor
     }
     /// Extract y-coordinate from self.
     #[inline]
-    fn y(self) -> Coor {
+    const fn y(self) -> Coor {
         (self.0 & 0xff) as Coor
     }
     /// Extract x-coordinate from self as usize.
     #[inline]
-    fn x_usize(self) -> usize {
+    const fn x_usize(self) -> usize {
         (self.0 >> 8) as usize
     }
     /// Extract y-coordinate from self as usize.
     #[inline]
-    fn y_usize(self) -> usize {
+    const fn y_usize(self) -> usize {
         (self.0 & 0xff) as usize
     }
     /// Return new offset shifted up by one cell.
     #[inline]
-    fn up(self) -> Self {
+    const fn up(self) -> Self {
         Self(self.0 + 1)
     }
     /// Return new offset shifted down by one cell.
     #[inline]
-    fn down(self) -> Self {
+    const fn down(self) -> Self {
         Self(self.0 - 1)
     }
     /// Return new offset shifted left by one cell.
     #[inline]
-    fn left(self) -> Self {
+    const fn left(self) -> Self {
         Self(self.0 - 0x100)
     }
     /// Return new offset shifted right by one cell.
     #[inline]
-    fn right(self) -> Self {
+    const fn right(self) -> Self {
         Self(self.0 + 0x100)
     }
 }
@@ -203,13 +202,13 @@ type Offsets = VecSet<[Offset; 16]>;
 /// to a block that does not have a specified target-position.
 /// "goal-offsets" correspond to blocks with specified target-positions.
 ///
-/// For an offset-collection in the nongoal_offsets (i.e. an entry in the
-/// nongoal_offsets vec), all blocks in that offset-collection
+/// For an offset-collection in the `nongoal_offsets` (i.e. an entry in the
+/// `nongoal_offsets` vec), all blocks in that offset-collection
 /// have the same shape. This is the sole reason we store them
 /// as a *set*: If two non-goal-blocks are in interchangable
 /// positions, that defines equivalent blockstates.
 /// Depending on the puzzle, this can lead to considerable speedups.
-/// This cannot be applied to goal_offsets, as this won't lead
+/// This cannot be applied to `goal_offsets`, as this won't lead
 /// to equivalent blockstates (in particular, two goal-blocks of
 /// the same shape might have different goal-positions, so a solved-blockstate
 /// would then be equivalent to a not-yet-solved-blockstate, i.e. we'd
@@ -293,7 +292,7 @@ impl Nonintersectionkey {
     fn abuse_this_datastructure_for_in_bounds_check(
         &self,
         shape_ix: usize,
-        offset: &Offset,
+        offset: Offset,
     ) -> bool {
         !self.nik[shape_ix][offset.x_usize() + offset.y_usize() * self.width].is_empty()
     }
@@ -301,6 +300,7 @@ impl Nonintersectionkey {
 
 /// An error that can be returned by the solver.
 #[derive(Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum SolvePuzzleError {
     MismatchedBounds,
     MismatchedGoalShapes(char),
@@ -310,21 +310,23 @@ pub enum SolvePuzzleError {
     EmptyPuzzle,
 }
 impl std::fmt::Display for SolvePuzzleError {
+    #[inline]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            SolvePuzzleError::MismatchedBounds => write!(f, "Start-bounds don't match goal-bounds."),
-            SolvePuzzleError::MismatchedGoalShapes(c) => write!(f, "The shape of the goal-block '{c}' in the start-configuration doesn't match its shape in the goal-configuration."),
-            SolvePuzzleError::GoalblockWithoutStartingblock(c) => write!(f, "The block '{c}' is in the goal-configuration, but not in the start-configuration."),
-            SolvePuzzleError::WidthTooLarge => write!(f, "The width of the puzzle is too large to fit into the data-type the solver uses. If you encounter this while trying to solve an actual puzzle, please file an issue."),
-            SolvePuzzleError::HeightTooLarge => write!(f, "The height of the puzzle is too large to fit into the data-type the solver uses. If you encounter this while trying to solve an actual puzzle, please file an issue."),
-            SolvePuzzleError::EmptyPuzzle => write!(f, "Please add some blocks."),
+            Self::MismatchedBounds => write!(f, "Start-bounds don't match goal-bounds."),
+            Self::MismatchedGoalShapes(c) => write!(f, "The shape of the goal-block '{c}' in the start-configuration doesn't match its shape in the goal-configuration."),
+            Self::GoalblockWithoutStartingblock(c) => write!(f, "The block '{c}' is in the goal-configuration, but not in the start-configuration."),
+            Self::WidthTooLarge => write!(f, "The width of the puzzle is too large to fit into the data-type the solver uses. If you encounter this while trying to solve an actual puzzle, please file an issue."),
+            Self::HeightTooLarge => write!(f, "The height of the puzzle is too large to fit into the data-type the solver uses. If you encounter this while trying to solve an actual puzzle, please file an issue."),
+            Self::EmptyPuzzle => write!(f, "Please add some blocks."),
         }
     }
 }
 impl std::error::Error for SolvePuzzleError {}
 impl From<SolvePuzzleError> for JsValue {
+    #[inline]
     fn from(val: SolvePuzzleError) -> Self {
-        JsValue::from(val.to_string())
+        Self::from(val.to_string())
     }
 }
 
@@ -1073,7 +1075,7 @@ fn solution_from_auxiliaries(
                 }
                 let beginning_offset = start_blockstate.goal_offsets[0];
                 let is_legal = |offset: &Offset| -> bool {
-                    nonintersectionkey.abuse_this_datastructure_for_in_bounds_check(0, offset)
+                    nonintersectionkey.abuse_this_datastructure_for_in_bounds_check(0, *offset)
                 };
                 let neighbors = dfs_general(&beginning_offset, &is_legal).collect_vec();
                 if neighbors.contains(&goal_target_offsets[0]) {
