@@ -4,16 +4,39 @@
 
 #![warn(
     clippy::all,
-    clippy::restriction,
     clippy::pedantic,
     clippy::nursery,
-    clippy::cargo
-)]
-#![allow(
-    clippy::implicit_return,
-    clippy::mem_forget, // Otherwise exported wasm-functions complain
-    clippy::std_instead_of_alloc,
-    clippy::arithmetic_side_effects,
+    clippy::cargo,
+    clippy::decimal_literal_representation,
+    clippy::empty_enum_variants_with_brackets,
+    clippy::empty_structs_with_brackets,
+    clippy::exhaustive_enums,
+    clippy::exhaustive_structs,
+    clippy::get_unwrap,
+    clippy::if_then_some_else_none,
+    clippy::indexing_slicing,
+    clippy::infinite_loop,
+    clippy::integer_division,
+    clippy::missing_assert_message,
+    clippy::missing_asserts_for_indexing,
+    clippy::missing_docs_in_private_items,
+    clippy::missing_inline_in_public_items,
+    clippy::multiple_inherent_impl,
+    clippy::print_stdout,
+    clippy::redundant_type_annotations,
+    clippy::shadow_unrelated,
+    clippy::shadow_same,
+    clippy::shadow_reuse,
+    clippy::single_call_fn,
+    clippy::string_lit_chars_any,
+    clippy::try_err,
+    clippy::undocumented_unsafe_blocks,
+    clippy::unneeded_field_pattern,
+    clippy::unwrap_in_result,
+    clippy::unwrap_used,
+    clippy::use_debug,
+    clippy::wildcard_enum_match_arm,
+    clippy::default_numeric_fallback
 )]
 
 pub mod examples;
@@ -473,12 +496,12 @@ fn get_neighboring_blockstates(
     // TODO: This is quite ugly, taking in a reference to the other offsets
     // for _every_ offset. The only reason we do this is to filter out
     // in case of BlockstateJustmoved::nongoal.
-    fn dfs_nongoal<'args>(
-        moving: impl Iterator<Item = (usize, Offset, &'args Offsets)> + 'args,
-        blockstate: &'args Blockstate,
-        nonintersectionkey: &'args Nonintersectionkey,
-        goal_shapekey_key: &'args GoalShapekeyKey,
-    ) -> impl Iterator<Item = BlockstateJustmoved> + 'args {
+    fn dfs_nongoal<'a>(
+        moving: impl Iterator<Item = (usize, Offset, &'a Offsets)> + 'a,
+        blockstate: &'a Blockstate,
+        nonintersectionkey: &'a Nonintersectionkey,
+        goal_shapekey_key: &'a GoalShapekeyKey,
+    ) -> impl Iterator<Item = BlockstateJustmoved> + 'a {
         moving.flat_map(
             move |(moving_shape_ix, moving_offset, offsets_with_same_shape_ix)| {
                 let mut trimmed_movingshape_offsets = offsets_with_same_shape_ix.clone();
@@ -523,12 +546,12 @@ fn get_neighboring_blockstates(
         )
     }
 
-    fn dfs_goal<'args>(
-        moving: impl Iterator<Item = (usize, &'args Offset)> + 'args,
-        blockstate: &'args Blockstate,
-        nonintersectionkey: &'args Nonintersectionkey,
-        goal_shapekey_key: &'args GoalShapekeyKey,
-    ) -> impl Iterator<Item = BlockstateJustmoved> + 'args {
+    fn dfs_goal<'a>(
+        moving: impl Iterator<Item = (usize, &'a Offset)> + 'a,
+        blockstate: &'a Blockstate,
+        nonintersectionkey: &'a Nonintersectionkey,
+        goal_shapekey_key: &'a GoalShapekeyKey,
+    ) -> impl Iterator<Item = BlockstateJustmoved> + 'a {
         moving.flat_map(move |(moving_goalvec_ix, moving_offset)| {
             let moving_shape_ix = goal_shapekey_key[moving_goalvec_ix];
             let is_legal = |offsety: &Offset| -> bool {
