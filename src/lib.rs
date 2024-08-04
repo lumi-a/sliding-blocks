@@ -274,13 +274,13 @@ struct Nonintersectionkey {
     width: usize,
     nik: ShapevecForNik<Vec<ShapevecForNik<BitVec>>>,
 }
-impl std::ops::Index<(usize, &Offset, usize, &Offset)> for Nonintersectionkey {
+impl std::ops::Index<(usize, Offset, usize, Offset)> for Nonintersectionkey {
     type Output = bool;
 
     #[inline]
     fn index(
         &self,
-        (shape_ix_a, a, shape_ix_b, b): (usize, &Offset, usize, &Offset),
+        (shape_ix_a, a, shape_ix_b, b): (usize, Offset, usize, Offset),
     ) -> &Self::Output {
         // TODO: Store Offset in a different form so that we don't need to convert them this way?
         // Perhaps we could also store ShapevecForNik as a HashMap?
@@ -397,12 +397,12 @@ fn build_nonintersectionkey(
 }
 
 fn dfs_general(
-    initial_offset: &Offset,
-    is_legal: &dyn Fn(&Offset) -> bool,
+    initial_offset: Offset,
+    is_legal: &dyn Fn(Offset) -> bool,
 ) -> impl Iterator<Item = Offset> {
     let mut legal_offsets: Vec<Offset> = Vec::new();
     let mut seen_offsets: VecSet<[Offset; 8]> = VecSet::empty();
-    seen_offsets.insert(*initial_offset);
+    seen_offsets.insert(initial_offset);
 
     // To eliminate backtracking:
     enum CameFrom {
@@ -422,7 +422,7 @@ fn dfs_general(
         (initial_offset.right(), CameFrom::Right),
     ] {
         // No need to check if seen_offsets contains them, as we know it won't
-        if is_legal(&new_offset) {
+        if is_legal(new_offset) {
             seen_offsets.insert(new_offset);
             legal_offsets.push(new_offset);
             stack.push((new_offset, new_dir));
@@ -452,7 +452,7 @@ fn dfs_general(
                 (offset.right(), CameFrom::Right),
             ],
         } {
-            if is_legal(&new_offset) && seen_offsets.insert(new_offset) {
+            if is_legal(new_offset) && seen_offsets.insert(new_offset) {
                 legal_offsets.push(new_offset);
                 stack.push((new_offset, new_dir));
             }
@@ -508,32 +508,32 @@ fn get_neighboring_blockstates(
             move |(moving_shape_ix, moving_offset, offsets_with_same_shape_ix)| {
                 let mut trimmed_movingshape_offsets = offsets_with_same_shape_ix.clone();
                 trimmed_movingshape_offsets.remove(&moving_offset);
-                let is_legal = |offsety: &Offset| -> bool {
+                let is_legal = |offsety: Offset| -> bool {
                     for (shape_ix, shape_offsets) in blockstate.nongoal_offsets.iter().enumerate() {
                         if shape_ix == moving_shape_ix {
                             continue;
                         }
                         for offset in shape_offsets.iter() {
-                            if !nonintersectionkey[(shape_ix, offset, moving_shape_ix, offsety)] {
+                            if !nonintersectionkey[(shape_ix, *offset, moving_shape_ix, offsety)] {
                                 return false;
                             }
                         }
                     }
                     for (goalvec_ix, offset) in blockstate.goal_offsets.iter().enumerate() {
                         let shape_ix = goal_shapekey_key[goalvec_ix];
-                        if !nonintersectionkey[(shape_ix, offset, moving_shape_ix, offsety)] {
+                        if !nonintersectionkey[(shape_ix, *offset, moving_shape_ix, offsety)] {
                             return false;
                         }
                     }
                     for offset in trimmed_movingshape_offsets.iter() {
-                        if !nonintersectionkey[(moving_shape_ix, offset, moving_shape_ix, offsety)]
+                        if !nonintersectionkey[(moving_shape_ix, *offset, moving_shape_ix, offsety)]
                         {
                             return false;
                         }
                     }
                     true
                 };
-                dfs_general(&moving_offset, &is_legal).map(move |mutated_offset| {
+                dfs_general(moving_offset, &is_legal).map(move |mutated_offset| {
                     let mut mutated_trimmed_offsets = trimmed_movingshape_offsets.clone();
                     mutated_trimmed_offsets.insert(mutated_offset);
                     let mut new_blockstate = blockstate.clone();
@@ -556,10 +556,10 @@ fn get_neighboring_blockstates(
     ) -> impl Iterator<Item = BlockstateJustmoved> + 'a {
         moving.flat_map(move |(moving_goalvec_ix, moving_offset)| {
             let moving_shape_ix = goal_shapekey_key[moving_goalvec_ix];
-            let is_legal = |offsety: &Offset| -> bool {
+            let is_legal = |offsety: Offset| -> bool {
                 for (shape_ix, shape_offsets) in blockstate.nongoal_offsets.iter().enumerate() {
                     for offset in shape_offsets.iter() {
-                        if !nonintersectionkey[(shape_ix, offset, moving_shape_ix, offsety)] {
+                        if !nonintersectionkey[(shape_ix, *offset, moving_shape_ix, offsety)] {
                             return false;
                         }
                     }
@@ -569,14 +569,14 @@ fn get_neighboring_blockstates(
                         continue;
                     }
                     let shape_ix = goal_shapekey_key[goalvec_ix];
-                    if !nonintersectionkey[(shape_ix, offset, moving_shape_ix, offsety)] {
+                    if !nonintersectionkey[(shape_ix, *offset, moving_shape_ix, offsety)] {
                         return false;
                     }
                 }
                 true
             };
             let justmoved = Justmoved::Goal(moving_goalvec_ix);
-            dfs_general(moving_offset, &is_legal).map(move |mutated_offset| {
+            dfs_general(*moving_offset, &is_legal).map(move |mutated_offset| {
                 let mut new_blockstate = blockstate.clone();
                 new_blockstate.goal_offsets[moving_goalvec_ix] = mutated_offset;
                 BlockstateJustmoved {
@@ -1074,10 +1074,10 @@ fn solution_from_auxiliaries(
                     return Some(vec![start_blockstate.clone()]);
                 }
                 let beginning_offset = start_blockstate.goal_offsets[0];
-                let is_legal = |offset: &Offset| -> bool {
-                    nonintersectionkey.abuse_this_datastructure_for_in_bounds_check(0, *offset)
+                let is_legal = |offset: Offset| -> bool {
+                    nonintersectionkey.abuse_this_datastructure_for_in_bounds_check(0, offset)
                 };
-                let neighbors = dfs_general(&beginning_offset, &is_legal).collect_vec();
+                let neighbors = dfs_general(beginning_offset, &is_legal).collect_vec();
                 if neighbors.contains(&goal_target_offsets[0]) {
                     let mut goal_blockstate = start_blockstate.clone();
                     goal_blockstate.goal_offsets.clone_from(goal_target_offsets);
