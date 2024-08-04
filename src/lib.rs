@@ -400,10 +400,6 @@ fn dfs_general(
     initial_offset: Offset,
     is_legal: &dyn Fn(Offset) -> bool,
 ) -> impl Iterator<Item = Offset> {
-    let mut legal_offsets: Vec<Offset> = Vec::new();
-    let mut seen_offsets: VecSet<[Offset; 8]> = VecSet::empty();
-    seen_offsets.insert(initial_offset);
-
     // To eliminate backtracking:
     enum CameFrom {
         Up,
@@ -411,6 +407,10 @@ fn dfs_general(
         Left,
         Right,
     }
+
+    let mut legal_offsets: Vec<Offset> = Vec::new();
+    let mut seen_offsets: VecSet<[Offset; 8]> = VecSet::empty();
+    seen_offsets.insert(initial_offset);
 
     let mut stack: Vec<(Offset, CameFrom)> = Vec::new();
 
@@ -683,21 +683,23 @@ fn _print_puzzle(
     height: Height,
 ) {
     // Create vec of blocks:
-    let mut blocks: Vec<Points> = Vec::new();
-    for (shape, offsets) in shapekey.iter().zip(blockstate.nongoal_offsets.iter()) {
-        for offset in offsets.iter() {
-            let block: Points = shift_points(shape, *offset);
+    let blocks = {
+        let mut blocks: Vec<Points> = Vec::new();
+        for (shape, offsets) in shapekey.iter().zip(blockstate.nongoal_offsets.iter()) {
+            for offset in offsets.iter() {
+                let block: Points = shift_points(shape, *offset);
+                blocks.push(block);
+            }
+        }
+        for (shape_ix, offset) in goal_shapekey_key.iter().zip(blockstate.goal_offsets.iter()) {
+            let block: Points = shapekey[*shape_ix]
+                .iter()
+                .map(|p| *p + (*offset).into())
+                .collect();
             blocks.push(block);
         }
-    }
-    for (shape_ix, offset) in goal_shapekey_key.iter().zip(blockstate.goal_offsets.iter()) {
-        let block: Points = shapekey[*shape_ix]
-            .iter()
-            .map(|p| *p + (*offset).into())
-            .collect();
-        blocks.push(block);
-    }
-    let blocks = blocks;
+        blocks
+    };
 
     for y in 0..=(height + 1) {
         let mut line0: Vec<&str> = Vec::new();
@@ -801,7 +803,7 @@ fn preprocess_proper_puzzle(
     let mut shape_to_chars_and_offsets: HashMap<Shape, Vec<(char, Offset)>> = HashMap::new();
     let mut reconstruction_map: ReconstructionMap = ReconstructionMap::new();
     let mut goal_chars_startoffset_targetoffset: Vec<(char, Offset, Offset)> = Vec::new();
-    for (c, start_points) in start_chartopoints.iter() {
+    for (c, start_points) in start_chartopoints {
         if c == &BOUNDS_CHAR {
             continue;
         }
@@ -831,7 +833,7 @@ fn preprocess_proper_puzzle(
         }
     }
     let mut char_to_goalshape: HashMap<char, Shape> = HashMap::new();
-    for (c, goal_points) in goal_chartopoints.iter() {
+    for (c, goal_points) in goal_chartopoints {
         // We already know the bounds match, so we don't need to care about those
         if c == &BOUNDS_CHAR {
             continue;
@@ -841,7 +843,7 @@ fn preprocess_proper_puzzle(
         char_to_goalshape.insert(*c, shape.clone());
     }
     // Check that the start and goal shapes are the same
-    for (c, goalshape) in char_to_goalshape.iter() {
+    for (c, goalshape) in &char_to_goalshape {
         let startshape = char_to_shape
             .get(c)
             .ok_or(SolvePuzzleError::GoalblockWithoutStartingblock(*c))?;
@@ -1078,13 +1080,11 @@ fn solution_from_auxiliaries(
                     nonintersectionkey.abuse_this_datastructure_for_in_bounds_check(0, offset)
                 };
                 let neighbors = dfs_general(beginning_offset, &is_legal).collect_vec();
-                if neighbors.contains(&goal_target_offsets[0]) {
+                neighbors.contains(&goal_target_offsets[0]).then(|| {
                     let mut goal_blockstate = start_blockstate.clone();
                     goal_blockstate.goal_offsets.clone_from(goal_target_offsets);
-                    Some(vec![start_blockstate.clone(), goal_blockstate])
-                } else {
-                    None
-                }
+                    vec![start_blockstate.clone(), goal_blockstate]
+                })
             } else {
                 pathfinding::directed::bfs::bfs(
                     &BlockstateJustmoved {
@@ -1117,7 +1117,7 @@ fn solution_from_auxiliaries(
             |blockstate| {
                 get_neighboring_blockstates(blockstate, nonintersectionkey, goal_shapekey_key)
                     .into_iter()
-                    .map(|blockstate| (blockstate, 1))
+                    .map(|bst| (bst, 1))
             },
             |BlockstateJustmoved { blockstate, .. }| {
                 misplaced_goalblocks_heuristic(blockstate, goal_target_offsets)
@@ -1144,11 +1144,13 @@ fn solve_puzzle_path(start: &str, goal: &str) -> Result<Option<Vec<Blockstate>>,
     }
 }
 
+#[inline]
 pub fn solve_puzzle_minmoves(start: &str, goal: &str) -> Result<Option<usize>, SolvePuzzleError> {
     let maybe_path = solve_puzzle_path(start, goal)?;
     Ok(maybe_path.map(|path| path.len() - 1))
 }
 
+#[inline]
 #[wasm_bindgen]
 pub fn solve_puzzle(start: &str, goal: &str) -> Result<Option<Vec<String>>, SolvePuzzleError> {
     match preprocessing(start, goal)? {
@@ -1169,8 +1171,8 @@ pub fn solve_puzzle(start: &str, goal: &str) -> Result<Option<Vec<String>>, Solv
                         board[(point.1 - 1) as usize][(point.0 - 1) as usize] = BOUNDS_CHAR;
                     }
 
-                    for ((shape, offset), c) in rm.iter() {
-                        for Point(x, y) in shape.iter() {
+                    for ((shape, offset), c) in rm {
+                        for Point(x, y) in shape {
                             board[(y + offset.y() - 1) as usize][(x + offset.x() - 1) as usize] =
                                 *c;
                         }
