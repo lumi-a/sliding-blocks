@@ -4,38 +4,11 @@
 
 #![warn(
     clippy::all,
-    clippy::pedantic,
     clippy::nursery,
     clippy::cargo,
-    clippy::decimal_literal_representation,
-    clippy::empty_enum_variants_with_brackets,
-    clippy::empty_structs_with_brackets,
     clippy::exhaustive_enums,
     clippy::exhaustive_structs,
-    clippy::get_unwrap,
-    clippy::if_then_some_else_none,
-    clippy::indexing_slicing,
-    clippy::infinite_loop,
-    clippy::integer_division,
-    clippy::missing_assert_message,
-    clippy::missing_asserts_for_indexing,
-    clippy::missing_inline_in_public_items,
-    clippy::multiple_inherent_impl,
-    clippy::print_stdout,
-    clippy::redundant_type_annotations,
-    clippy::shadow_unrelated,
-    clippy::shadow_same,
-    clippy::shadow_reuse,
-    clippy::single_call_fn,
-    clippy::string_lit_chars_any,
-    clippy::try_err,
-    clippy::undocumented_unsafe_blocks,
-    clippy::unneeded_field_pattern,
-    clippy::unwrap_in_result,
-    clippy::unwrap_used,
-    clippy::use_debug,
-    clippy::wildcard_enum_match_arm,
-    clippy::default_numeric_fallback
+    clippy::redundant_type_annotations
 )]
 
 pub mod examples;
