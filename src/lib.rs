@@ -40,7 +40,7 @@ type Points = BTreeSet<Point>;
 
 /// Shift a collection of points by an `Offset`.
 fn shift_points(points: &Points, offset: Offset) -> Points {
-    points.iter().map(|point| *point + offset.into()).collect()
+    points.iter().map(|point| *point + offset).collect()
 }
 
 /// A map from a `char` to the cells it occupies. Used in pre-processing.
@@ -157,6 +157,7 @@ type Offsets = VecSet<[Offset; 8]>;
 /// The blockstates, stored as a tuple:
 /// - A `Vec`, each entry being a collection of non-goal-`Offsets`.
 /// - A `Vec`, each entry being a goal-`Offset`.
+///
 /// By "non-goal-offset" we mean that the offset refers
 /// to a block that does not have a specified target-position.
 /// "goal-offsets" correspond to blocks with specified target-positions.
@@ -647,10 +648,7 @@ fn _print_puzzle(
             }
         }
         for (shape_ix, offset) in goal_shapekey_key.iter().zip(blockstate.goal_offsets.iter()) {
-            let block: Points = shapekey[*shape_ix]
-                .iter()
-                .map(|p| *p + (*offset).into())
-                .collect();
+            let block: Points = shapekey[*shape_ix].iter().map(|p| *p + (*offset)).collect();
             blocks.push(block);
         }
         blocks
