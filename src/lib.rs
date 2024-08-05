@@ -241,8 +241,6 @@ impl std::ops::Index<(usize, Offset, usize, Offset)> for Nonintersectionkey {
         &self,
         (shape_ix_a, a, shape_ix_b, b): (usize, Offset, usize, Offset),
     ) -> &Self::Output {
-        // TODO: Store Offset in a different form so that we don't need to convert them this way?
-        // Perhaps we could also store ShapevecForNik as a HashMap?
         &self.nik[shape_ix_a][a.x_usize() + a.y_usize() * self.width][shape_ix_b]
             [b.x_usize() + b.y_usize() * self.width]
     }
@@ -566,17 +564,13 @@ fn get_neighboring_blockstates(
                     .iter()
                     .enumerate()
                     .flat_map(|(shape_ix, offsets)| {
-                        offsets
-                            .iter()
-                            .filter(move |offset| {
-                                // TODO: The .filter checks shape_ix != *justmoved_shape_ix for every single offset.
-                                // Can we do better?
-                                // And do we even need to? Branch-predictor should do some solid work here,
-                                // and these checks really are cheap.
-                                // TODO: use filter_map here. And also everywhere else applicable.
-                                shape_ix != *justmoved_shape_ix || **offset != *justmoved_offset
-                            })
-                            .map(move |offset| (shape_ix, *offset, offsets))
+                        offsets.iter().filter_map(move |offset| {
+                            if shape_ix != *justmoved_shape_ix || *offset != *justmoved_offset {
+                                Some((shape_ix, *offset, offsets))
+                            } else {
+                                None
+                            }
+                        })
                     }),
                 blockstate,
                 nonintersectionkey,
