@@ -1,8 +1,6 @@
 use core::convert::From;
 use wasm_bindgen::prelude::*;
 
-// TODO: Perhaps conflate JsPuzzle and Puzzle by using Cow
-
 #[wasm_bindgen(getter_with_clone)]
 #[derive(Debug, Clone)]
 #[non_exhaustive]

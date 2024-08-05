@@ -17,7 +17,8 @@
   ],
   "license": "(MIT OR Apache-2.0)",
   "dependencies": {
-    "interactjs": "^1.10.27",
+    "@interactjs/actions": "^1.10.27",
+    "@interactjs/interact": "^1.10.27",
     "js-confetti": "^0.12.0",
     "sliding-blocks": "file:../pkg"
   },

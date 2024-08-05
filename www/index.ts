@@ -1,6 +1,7 @@
 import './style.css'
-import { solve_puzzle, get_all_js_examples } from "sliding-blocks"
-import interact from 'interactjs' // TODO: Only install the parts you need: https://interactjs.io/docs/installation#npm-streamlined
+import { solve_puzzle, js_get_all } from "sliding-blocks"
+import '@interactjs/actions/drag'
+import interact from '@interactjs/interact' // TODO: Only install the parts you need: https://interactjs.io/docs/installation#npm-streamlined
 import JSConfetti from 'js-confetti'
 const jsConfetti = new JSConfetti()
 
@@ -138,7 +139,6 @@ function shape_to_path(shape: Shape, inset: number): string {
 const BOUNDS_CHAR: string = '.'
 
 function char_to_color(char: string, lightness: number = 0.75, alpha: number = 1): string {
-    // TODO: Dark mode stuff?
     if (char == BOUNDS_CHAR) {
         return `#BBB`
     }
@@ -429,7 +429,6 @@ class Blockstate {
     }
 
     to_string() {
-        // TODO: How many of these methods should I import from Rust?
         let str = ""
         const block_coordinates: Array<[Block, Shape]> = this.blocks.map(b => [b, b.get_coordinates()])
         const bounds = this.bounds.get_coordinates()
@@ -490,12 +489,11 @@ class Puzzle {
     public history_ix: number
     public history: Array<Array<Offset>>
     public blockstate: Blockstate
-    public goal_offsets: Array<Offset | null> // TODO: This is awful
+    public goal_offsets: Array<Offset | null>
 
     constructor(start_string: string, goal_string: string, min_moves: number | null = null) {
         this.min_moves = min_moves
 
-        // TODO: Lots of error-checking on shapes that's also done in Rust
         const start_blockstate = Blockstate.blockstate_from_string(start_string)
         this.blockstate = start_blockstate
         const goal_blockstate = Blockstate.blockstate_from_string(goal_string)
@@ -669,7 +667,7 @@ puzzle_solve_btn.addEventListener("click", e => {
 })
 
 const puzzle_selection = document.getElementById("puzzle-selection") as HTMLSelectElement
-const predefined_puzzles = get_all_js_examples().sort((a, b) => a.min_moves - b.min_moves)
+const predefined_puzzles = js_get_all().sort((a, b) => a.min_moves - b.min_moves)
 for (let js_puzzle of predefined_puzzles) {
     const option = document.createElement("option")
     option.textContent = `[${js_puzzle.min_moves}] ${js_puzzle.name}`
