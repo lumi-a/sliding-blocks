@@ -1,6 +1,6 @@
-![Banner showing an example of a sliding-blocks-puzzle.](./banner.png)
+![Banner showing an example of a sliding-blocks-puzzle](./banner.png)
 
-A web-app for playing, and rust-crate for solving, sliding-block puzzles like the [ones from the Professor Layton games](https://layton.fandom.com/wiki/Category:Sliding).
+A web-app for playing, and rust-crate for solving, sliding-block puzzles like the [ones from the](https://layton.fandom.com/wiki/Category:Slide) [Professor Layton games](https://layton.fandom.com/wiki/Category:Sliding).
 
 # Web-App
 [Try it out!](https://lumi-a.github.io/sliding-blocks) Written in TypeScript 🚬, the code is in the `www`-directory. You can also specify your own puzzles to play around with and have them be solved automatically using the shortest possible number of moves! This uses the rust-crate compiled to web-assembly.
