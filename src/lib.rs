@@ -31,28 +31,7 @@ type Width = Coor;
 type Height = Coor;
 
 /// A "global" coordinate, in contrast to the `Offset` of a `Shape`.
-/// Over time, these two types diverged a lot, for what I hope (but
-/// don't believe) to be good reasons. I might implement `Point`
-/// as a wrapper around `Offset` at some point. (TODO)
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Copy)]
-struct Point(Coor, Coor);
-impl Add for Point {
-    type Output = Self;
-    fn add(self, other: Self) -> Self {
-        Self(self.0 + other.0, self.1 + other.1)
-    }
-}
-impl Sub for Point {
-    type Output = Self;
-    fn sub(self, other: Self) -> Self {
-        Self(self.0 - other.0, self.1 - other.1)
-    }
-}
-impl From<Offset> for Point {
-    fn from(offset: Offset) -> Self {
-        Self(offset.x(), offset.y())
-    }
-}
+type Point = Offset;
 
 /// A collection of Points. It's a `BTreeSet` rather than any
 /// other set, to implement `Ord`.
@@ -86,12 +65,12 @@ fn get_points_dimensions(coordinates_set: &Points) -> (Point, Point) {
     let mut max_x = Coor::MIN;
     let mut max_y = Coor::MIN;
     for point in coordinates_set {
-        max_x = max(max_x, point.0);
-        max_y = max(max_y, point.1);
-        min_x = min(min_x, point.0);
-        min_y = min(min_y, point.1);
+        max_x = max(max_x, point.x());
+        max_y = max(max_y, point.y());
+        min_x = min(min_x, point.x());
+        min_y = min(min_y, point.y());
     }
-    (Point(min_x, min_y), Point(max_x, max_y))
+    (Offset::new(min_x, min_y), Offset::new(max_x, max_y))
 }
 
 /// An offset (of a shape). We'll later assume that each shape has,
@@ -149,17 +128,24 @@ impl Offset {
         Self(self.0 + 0x100)
     }
 }
-impl From<&Point> for Offset {
-    fn from(point: &Point) -> Self {
-        Self::new(point.0, point.1)
-    }
-}
 impl tinyset::Fits64 for Offset {
     unsafe fn from_u64(x: u64) -> Self {
         Self(x as u16)
     }
     fn to_u64(self) -> u64 {
         self.0 as u64
+    }
+}
+impl Add for Offset {
+    type Output = Self;
+    fn add(self, other: Self) -> Self {
+        Self(self.0 + other.0)
+    }
+}
+impl Sub for Offset {
+    type Output = Self;
+    fn sub(self, other: Self) -> Self {
+        Self(self.0 - other.0)
     }
 }
 
@@ -681,18 +667,18 @@ fn _print_puzzle(
         let mut line1: Vec<&str> = Vec::new();
         for x in 0..=(width + 1) {
             // Find block that contains (x, y)
-            let option_block_ix: Option<usize> =
-                blocks.iter().position(|block| block.contains(&Point(x, y)));
+            let c = Offset::new(x, y);
+            let option_block_ix: Option<usize> = blocks.iter().position(|block| block.contains(&c));
             match option_block_ix {
                 Some(block_ix) => {
-                    let t = y > 0 && blocks[block_ix].contains(&Point(x, y - 1));
-                    let b = blocks[block_ix].contains(&Point(x, y + 1));
-                    let l = x > 0 && blocks[block_ix].contains(&Point(x - 1, y));
-                    let r = blocks[block_ix].contains(&Point(x + 1, y));
-                    let tl = y > 0 && x > 0 && blocks[block_ix].contains(&Point(x - 1, y - 1));
-                    let tr = y > 0 && blocks[block_ix].contains(&Point(x + 1, y - 1));
-                    let bl = x > 0 && blocks[block_ix].contains(&Point(x - 1, y + 1));
-                    let br = blocks[block_ix].contains(&Point(x + 1, y + 1));
+                    let t = y > 0 && blocks[block_ix].contains(&c.up());
+                    let b = blocks[block_ix].contains(&c.down());
+                    let l = x > 0 && blocks[block_ix].contains(&c.left());
+                    let r = blocks[block_ix].contains(&c.right());
+                    let tl = y > 0 && x > 0 && blocks[block_ix].contains(&c.left().down());
+                    let tr = y > 0 && blocks[block_ix].contains(&c.right().up());
+                    let bl = x > 0 && blocks[block_ix].contains(&c.down().left());
+                    let br = blocks[block_ix].contains(&c.right().down());
                     line0.push(match (t, l, tl) {
                         (false, false, _) => "╭─",
                         (true, false, _) => "│ ",
@@ -723,7 +709,7 @@ fn _print_puzzle(
                     });
                 }
                 None => {
-                    if bounds.contains(&Point(x, y)) {
+                    if bounds.contains(&c) {
                         line0.push("    ");
                         line1.push("    ");
                     } else {
@@ -795,16 +781,12 @@ fn preprocess_proper_puzzle(
         shape_to_chars_and_offsets
             .entry(shape.clone())
             .or_default()
-            .push((*c, (&shape_min).into()));
-        reconstruction_map.insert((shape, (&shape_min).into()), *c);
+            .push((*c, shape_min));
+        reconstruction_map.insert((shape, shape_min), *c);
 
         if let Some(goal_points) = goal_chartopoints.get(c) {
             let (target_min, _) = get_points_dimensions(goal_points);
-            goal_chars_startoffset_targetoffset.push((
-                *c,
-                (&shape_min).into(),
-                (&target_min).into(),
-            ));
+            goal_chars_startoffset_targetoffset.push((*c, shape_min, target_min));
         }
     }
     let mut char_to_goalshape: HashMap<char, Shape> = HashMap::new();
@@ -986,7 +968,7 @@ fn string_to_chartopoints(s: &str) -> Result<StringToCharToPointsResult, SolvePu
         let y: Coor = y_usize
             .try_into()
             .map_err(|_| SolvePuzzleError::HeightTooLarge)?;
-        let point = Point(x, y);
+        let point = Offset::new(x, y);
         char_to_points.entry(c).or_default().insert(point);
     }
 
@@ -1143,13 +1125,13 @@ pub fn solve_puzzle(start: &str, goal: &str) -> Result<Option<Vec<String>>, Solv
                     let mut board: Vec<Vec<char>> =
                         vec![vec![' '; width as usize]; height as usize];
                     for point in &bounds {
-                        board[(point.1 - 1) as usize][(point.0 - 1) as usize] = BOUNDS_CHAR;
+                        board[point.y_usize() - 1][point.x_usize() - 1] = BOUNDS_CHAR;
                     }
 
                     for ((shape, offset), c) in rm {
-                        for Point(x, y) in shape {
-                            board[(y + offset.y() - 1) as usize][(x + offset.x() - 1) as usize] =
-                                *c;
+                        for twoffset in shape {
+                            board[twoffset.y_usize() + offset.y_usize() - 1]
+                                [twoffset.x_usize() + offset.x_usize() - 1] = *c;
                         }
                     }
 
