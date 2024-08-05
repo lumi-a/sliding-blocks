@@ -5,11 +5,9 @@ A web-app for playing, and rust-crate for solving, sliding-block puzzles like th
 # Web-App
 [Try it out!](https://lumi-a.github.io/sliding-blocks) Written in TypeScript 🚬, the code is in the `www`-directory. You can also specify your own puzzles to play around with and have them be solved automatically using the shortest possible number of moves! This uses the rust-crate compiled to web-assembly.
 
-<!-- TODO: "Document" puzzle-syntax -->
-
 # Solver
-Written in rust 🦀, the code is in the top-level directory. To accomodate all the speedup-ideas I could think of, the code became quite complicated. If you'd like to understand what's going on, feel free to contact me, and I'll gladly explain it! At a very basic level:
-- We imagines a graph, where the nodes are all the different legal block-configurations, and two nodes are adjacent if one block-configuration can be transformed into the other block-configuration by moving a single block.
+Written in rust 🦀, the code is in the top-level directory. To accommodate all the speedup-ideas I could think of, the code became quite complicated. If you'd like to understand what's going on, feel free to contact me, and I'll gladly explain it! At a very basic level:
+- We imagine a graph, where the nodes are all the different legal block-configurations, and two nodes are adjacent if one block-configuration can be transformed into the other block-configuration by moving a single block.
 - Call a block a "goal-block" if it appears in the goal-configuration, i.e. it has a goal-position it has to reach for the puzzle to be considered "solved".
 - If there is only one goal-block, we essentially run BFS.
 
