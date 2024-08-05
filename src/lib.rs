@@ -151,8 +151,7 @@ impl Sub for Offset {
 
 /// A collection of `Offset`s, used for storing
 /// offsets of the same shape in one blockstate.
-/// TODO: Experiment with the initial capacity.
-type Offsets = VecSet<[Offset; 16]>;
+type Offsets = VecSet<[Offset; 8]>;
 
 /// The blockstates, stored as a tuple:
 /// - A `Vec`, each entry being a collection of non-goal-`Offsets`.
@@ -204,7 +203,7 @@ type ShapevecForNik<T> = Vec<T>;
 /// So that we not always have to check whether two blocks of
 /// two given shape and two given offsets intersect each other,
 /// we calculate all that in pre-processing and store it in
-/// what I called a Nonintersectionkey, a horrible name (TODO)
+/// what I called a Nonintersectionkey, a horrible name.
 /// Its `width` keeps track of the width of the board, so that we
 /// don't have to index over x and y separately.
 /// Its `nik` attribute stores the values. For a block A of shape-index
