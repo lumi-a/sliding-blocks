@@ -17,7 +17,8 @@ use bitvec::prelude::*;
 use core::cmp::{max, min, Ordering};
 use core::ops::{Add, Sub};
 use itertools::Itertools;
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use rustc_hash::FxHashMap as HashMap;
+use std::collections::{BTreeMap, BTreeSet};
 use vec_collections::{AbstractVecSet, VecSet};
 use wasm_bindgen::prelude::*;
 
@@ -298,8 +299,8 @@ fn build_nonintersectionkey(
 ) -> Nonintersectionkey {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
     struct RelativeOffset(isize, isize); // (isize, isize) because Coor is too small and I want negatives
-    let mut relative_nik: HashMap<(usize, usize, RelativeOffset), bool> = HashMap::new();
-    let mut inbounds: HashMap<(usize, Offset), bool> = HashMap::new();
+    let mut relative_nik: HashMap<(usize, usize, RelativeOffset), bool> = Default::default();
+    let mut inbounds: HashMap<(usize, Offset), bool> = Default::default();
 
     // Brace yourselves
     let mut nikvec: ShapevecForNik<Vec<ShapevecForNik<BitVec>>> = Vec::new();
@@ -759,9 +760,9 @@ fn preprocess_proper_puzzle(
 
     let bounds: Shape = start_chartopoints[&BOUNDS_CHAR].clone();
 
-    let mut char_to_shape: HashMap<char, Shape> = HashMap::new();
-    let mut shape_to_chars_and_offsets: HashMap<Shape, Vec<(char, Offset)>> = HashMap::new();
-    let mut reconstruction_map: ReconstructionMap = ReconstructionMap::new();
+    let mut char_to_shape: HashMap<char, Shape> = Default::default();
+    let mut shape_to_chars_and_offsets: HashMap<Shape, Vec<(char, Offset)>> = Default::default();
+    let mut reconstruction_map: ReconstructionMap = Default::default();
     let mut goal_chars_startoffset_targetoffset: Vec<(char, Offset, Offset)> = Vec::new();
     for (c, start_points) in start_chartopoints {
         if c == &BOUNDS_CHAR {
@@ -788,7 +789,7 @@ fn preprocess_proper_puzzle(
             goal_chars_startoffset_targetoffset.push((*c, shape_min, target_min));
         }
     }
-    let mut char_to_goalshape: HashMap<char, Shape> = HashMap::new();
+    let mut char_to_goalshape: HashMap<char, Shape> = Default::default();
     for (c, goal_points) in goal_chartopoints {
         // We already know the bounds match, so we don't need to care about those
         if c == &BOUNDS_CHAR {

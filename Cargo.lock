@@ -527,6 +527,7 @@ dependencies = [
  "criterion",
  "itertools 0.13.0",
  "pathfinding",
+ "rustc-hash",
  "tinyset",
  "vec-collections",
  "wasm-bindgen",
