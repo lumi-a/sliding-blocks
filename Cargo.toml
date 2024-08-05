@@ -30,5 +30,9 @@ wasm-bindgen-test = "0.3"
 name = "example"
 harness = false
 
+[profile.release]
+codegen-units = 1
+lto = "fat"
+
 [profile.test]
 inherits = "release"
