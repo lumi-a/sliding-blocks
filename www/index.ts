@@ -155,6 +155,9 @@ svg_puzzle.id = "svg-puzzle"
 svg_puzzle.setAttribute("xmlns", SVG_NAMESPACE)
 svg_puzzle_container.appendChild(svg_puzzle)
 
+function char_to_pattern_id(chr: string): string {
+    return `block-pattern-${chr.codePointAt(0).toString(16).padStart(4, '0')}`
+}
 
 class Block {
     public shape: Shape
@@ -218,7 +221,7 @@ class Block {
         path.setAttribute("stroke", char_to_color(this.char, 0.25))
         path.setAttribute("stroke-width", "0.025")
         if (this.char !== BOUNDS_CHAR) {
-            const pattern_id = `block-pattern-${this.char}`
+            const pattern_id = char_to_pattern_id(this.char)
             path.setAttribute("fill", `url(#${pattern_id})`)
         } else {
             path.setAttribute("fill", "#CCC")
@@ -230,7 +233,7 @@ class Block {
         if (this.char !== BOUNDS_CHAR) {
             const defs: SVGDefsElement = svg_elem.querySelector("defs") ?? svg_elem.appendChild(document.createElementNS(SVG_NAMESPACE, "defs"))
             const pattern = document.createElementNS(SVG_NAMESPACE, "pattern")
-            const pattern_id = `block-pattern-${this.char}`
+            const pattern_id = char_to_pattern_id(this.char)
 
             const [_, max] = get_extremes(this.shape)
             pattern.setAttribute("id", pattern_id)

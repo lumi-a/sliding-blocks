@@ -18,7 +18,7 @@ use core::cmp::{max, min, Ordering};
 use core::ops::{Add, Sub};
 use itertools::Itertools;
 use rustc_hash::FxHashMap as HashMap;
-use smallvec::{smallvec, SmallVec};
+use smallvec::SmallVec;
 use std::collections::{BTreeMap, BTreeSet};
 use vec_collections::{AbstractVecSet, VecSet};
 use wasm_bindgen::prelude::*;
@@ -369,11 +369,11 @@ where
         Right,
     }
 
-    let mut legal_offsets: Vec<Offset> = Vec::new();
-    let mut seen_offsets: VecSet<[Offset; 8]> = VecSet::empty();
+    let mut legal_offsets: SmallVec<[Offset; 8]> = Default::default();
+    let mut seen_offsets: VecSet<[Offset; 16]> = VecSet::empty();
     seen_offsets.insert(initial_offset);
 
-    let mut stack: Vec<(Offset, CameFrom)> = Vec::new();
+    let mut stack: SmallVec<[(Offset, CameFrom); 8]> = Default::default();
 
     // Initial setup:
     for (new_offset, new_dir) in [
@@ -569,10 +569,12 @@ fn get_neighboring_blockstates(
                     .iter()
                     .enumerate()
                     .flat_map(|(shape_ix, offsets)| {
-                        offsets.iter().filter_map(move |offset| {
-                            (shape_ix != *justmoved_shape_ix || *offset != *justmoved_offset)
-                                .then(|| (shape_ix, *offset, offsets))
-                        })
+                        offsets
+                            .iter()
+                            .filter(move |offset| {
+                                shape_ix != *justmoved_shape_ix || **offset != *justmoved_offset
+                            })
+                            .map(move |offset| ((shape_ix, *offset, offsets)))
                     }),
                 blockstate,
                 nonintersectionkey,
@@ -873,7 +875,8 @@ fn preprocess_proper_puzzle(
         .map(|(_, chars_and_offsets)| {
             chars_and_offsets
                 .iter()
-                .filter_map(|(c, offset)| (!goal_chartopoints.contains_key(c)).then(|| *offset))
+                .filter(|(c, _)| !goal_chartopoints.contains_key(c))
+                .map(|(_, offset)| *offset)
                 .collect()
         })
         .filter(|offsets: &Offsets| !offsets.is_empty())
