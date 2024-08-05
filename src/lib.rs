@@ -587,6 +587,7 @@ fn get_neighboring_blockstates(
                                 // Can we do better?
                                 // And do we even need to? Branch-predictor should do some solid work here,
                                 // and these checks really are cheap.
+                                // TODO: use filter_map here. And also everywhere else applicable.
                                 shape_ix != *justmoved_shape_ix || **offset != *justmoved_offset
                             })
                             .map(move |offset| (shape_ix, *offset, offsets))
