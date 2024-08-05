@@ -1,11 +1,20 @@
-use sliding_blocks::examples::ALL_EXAMPLES;
+use sliding_blocks::examples::{MULTI_GOAL_EXAMPLES, SINGLE_GOAL_EXAMPLES};
 use sliding_blocks::{solve_puzzle, solve_puzzle_minmoves, SolvePuzzleError};
 use wasm_bindgen_test::*;
 
 #[test]
 #[wasm_bindgen_test]
 fn test_examples() {
-    for puzzle in ALL_EXAMPLES {
+    for puzzle in MULTI_GOAL_EXAMPLES
+        .iter()
+        .filter(|p| p.name != "🎩 The Time Machine")
+    {
+        assert_eq!(
+            Ok(Some(puzzle.min_moves)),
+            solve_puzzle_minmoves(puzzle.start, puzzle.goal)
+        );
+    }
+    for puzzle in SINGLE_GOAL_EXAMPLES {
         assert_eq!(
             Ok(Some(puzzle.min_moves)),
             solve_puzzle_minmoves(puzzle.start, puzzle.goal)

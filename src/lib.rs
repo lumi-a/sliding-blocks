@@ -572,7 +572,7 @@ fn get_neighboring_blockstates(
                             .filter(move |offset| {
                                 shape_ix != *justmoved_shape_ix || **offset != *justmoved_offset
                             })
-                            .map(move |offset| ((shape_ix, *offset, offsets)))
+                            .map(move |offset| (shape_ix, *offset, offsets))
                     }),
                 blockstate,
                 nonintersectionkey,
