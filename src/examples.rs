@@ -48,7 +48,7 @@ impl From<Puzzle> for JsPuzzle {
     }
 }
 
-pub const MULTI_GOAL_EXAMPLES: [Puzzle; 8] = [
+pub const MULTI_GOAL_EXAMPLES: [Puzzle; 9] = [
     Puzzle {
         name: "🎩 Ten-Step Solution",
         start: "  
@@ -160,6 +160,26 @@ pub const MULTI_GOAL_EXAMPLES: [Puzzle; 8] = [
         min_moves: 39,
     },
     Puzzle {
+        name: "🧬 Entanglement",
+        start: "
+      A    A
+    11.  11.
+    .12. ..2.
+    .33. ..44
+     .34  .4.
+     B    B
+    ",
+        goal: "
+      B    B
+    ...  ...
+    .... ....
+    .... ....
+     ...  ...
+     A    A
+    ",
+        min_moves: 47,
+    },
+    Puzzle {
         name: "🎩 Jewel Swap",
         start: "
      .0011RR
@@ -217,7 +237,7 @@ pub const MULTI_GOAL_EXAMPLES: [Puzzle; 8] = [
     },
 ];
 
-pub const SINGLE_GOAL_EXAMPLES: [Puzzle; 13] = [
+pub const SINGLE_GOAL_EXAMPLES: [Puzzle; 15] = [
     Puzzle {
         name: "🎩 Cluttered Bag",
         start: "
@@ -461,6 +481,30 @@ pub const SINGLE_GOAL_EXAMPLES: [Puzzle; 13] = [
         min_moves: 81,
     },
     Puzzle {
+        name: "🧬 Garbage Disposal",
+        start: "
+      tt
+      tt
+    ...o..
+    .ppoo.
+     ypog
+     y.gg
+      bb
+      ..
+",
+        goal: "
+      ..
+      ..
+    ......
+    ......
+     ....
+     ....
+      tt
+      tt
+",
+        min_moves: 84,
+    },
+    Puzzle {
         name: "🎩 From Right to Left",
         start: "
       ippPPI
@@ -499,6 +543,22 @@ pub const SINGLE_GOAL_EXAMPLES: [Puzzle; 13] = [
     .##.
     ",
         min_moves: 128,
+    },
+    Puzzle {
+        name: "🧬 Royal Escape",
+        start: "
+    -=//+
+    ##|.+
+    ##**.
+    __m*$
+    ",
+        goal: "
+    .....
+    ...##
+    ...##
+    .....
+    ",
+        min_moves: 172,
     },
 ];
 
