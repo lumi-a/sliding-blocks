@@ -566,11 +566,8 @@ fn get_neighboring_blockstates(
                     .enumerate()
                     .flat_map(|(shape_ix, offsets)| {
                         offsets.iter().filter_map(move |offset| {
-                            if shape_ix != *justmoved_shape_ix || *offset != *justmoved_offset {
-                                Some((shape_ix, *offset, offsets))
-                            } else {
-                                None
-                            }
+                            (shape_ix != *justmoved_shape_ix || *offset != *justmoved_offset)
+                                .then(|| (shape_ix, *offset, offsets))
                         })
                     }),
                 blockstate,
@@ -872,8 +869,7 @@ fn preprocess_proper_puzzle(
         .map(|(_, chars_and_offsets)| {
             chars_and_offsets
                 .iter()
-                .filter(|(c, _)| !goal_chartopoints.contains_key(c))
-                .map(|(_, offset)| *offset)
+                .filter_map(|(c, offset)| (!goal_chartopoints.contains_key(c)).then(|| *offset))
                 .collect()
         })
         .filter(|offsets: &Offsets| !offsets.is_empty())
