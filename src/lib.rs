@@ -18,6 +18,7 @@ use core::cmp::{max, min, Ordering};
 use core::ops::{Add, Sub};
 use itertools::Itertools;
 use rustc_hash::FxHashMap as HashMap;
+use smallvec::{smallvec, SmallVec};
 use std::collections::{BTreeMap, BTreeSet};
 use vec_collections::{AbstractVecSet, VecSet};
 use wasm_bindgen::prelude::*;
@@ -175,9 +176,11 @@ type Offsets = VecSet<[Offset; 8]>;
 /// get messed up.)
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct Blockstate {
-    nongoal_offsets: Vec<Offsets>,
-    goal_offsets: Vec<Offset>,
+    nongoal_offsets: NongoalOffsets,
+    goal_offsets: GoalOffsets,
 }
+type NongoalOffsets = SmallVec<[Offsets; 8]>;
+type GoalOffsets = SmallVec<[Offset; 8]>;
 
 /// Keeps track of shapes, for all `Blockstate`s. Always has
 /// length at least `nongoal_offsets.len()`. All blocks corresponding
@@ -196,7 +199,7 @@ type GoalShapekeyKey = Vec<usize>;
 /// Stores the target-offsets each goal-block needs to reach.
 /// For a goal-block at entry `i` in `goal_offsets`, its target-offset
 /// is `goal_target_offsets[i]`.
-type GoalTargetOffsets = Vec<Offset>;
+type GoalTargetOffsets = GoalOffsets;
 
 /// Type-alias to make the definition of `Nonintersectionkey`
 /// more readable.
@@ -865,7 +868,7 @@ fn preprocess_proper_puzzle(
         .collect();
     goal_shapekey_key.shrink_to_fit();
 
-    let mut nongoal_offsets = raw_shapekey
+    let mut nongoal_offsets: NongoalOffsets = raw_shapekey
         .iter()
         .map(|(_, chars_and_offsets)| {
             chars_and_offsets
@@ -874,23 +877,23 @@ fn preprocess_proper_puzzle(
                 .collect()
         })
         .filter(|offsets: &Offsets| !offsets.is_empty())
-        .collect_vec();
+        .collect();
     nongoal_offsets.shrink_to_fit();
 
-    let mut goal_offsets = goal_chars_startoffset_targetoffset
+    let mut goal_offsets: GoalOffsets = goal_chars_startoffset_targetoffset
         .iter()
         .map(|(_, start, _)| *start)
-        .collect_vec();
+        .collect();
     goal_offsets.shrink_to_fit();
 
     let blockstate: Blockstate = Blockstate {
         nongoal_offsets,
         goal_offsets,
     };
-    let mut goal_target_offsets = goal_chars_startoffset_targetoffset
+    let mut goal_target_offsets: GoalTargetOffsets = goal_chars_startoffset_targetoffset
         .iter()
         .map(|(_, _, target)| *target)
-        .collect_vec();
+        .collect();
     goal_target_offsets.shrink_to_fit();
 
     let nonintersectionkey = build_nonintersectionkey(&bounds, &shapekey, width, height);

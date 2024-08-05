@@ -528,6 +528,7 @@ dependencies = [
  "itertools 0.13.0",
  "pathfinding",
  "rustc-hash",
+ "smallvec",
  "tinyset",
  "vec-collections",
  "wasm-bindgen",
