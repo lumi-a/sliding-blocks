@@ -1,6 +1,4 @@
-//! Solving sliding-block puzzles like the [`ones from the Professor Layton games`]
-//!
-//! [`ones from the Professor Layton games`](https://layton.fandom.com/wiki/Category:Sliding)
+//! Solving sliding-block puzzles like the [ones from the Professor Layton games](https://layton.fandom.com/wiki/Category:Sliding)
 
 #![warn(
     clippy::all,
