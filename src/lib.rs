@@ -454,6 +454,19 @@ fn get_neighboring_blockstates(
     nonintersectionkey: &Nonintersectionkey,
     goal_shapekey_key: &GoalShapekeyKey,
 ) -> Vec<BlockstateJustmoved> {
+    // It might be possible to speed up queries using dynamic-programming
+    // on the nonintersectionkey: In the end,
+    //  `left_nonintersection[shape][i] ∩ right_nonintersection[shape][?-i]
+    //   ∩ [(nik[shape][x1][y1][shape]∩…∩(nik[shape][x(i-1)][y(i-1)][shape]))
+    //     ∩ (nik[shape][x(i+1)][y(i+1)][shape]∩…∩(nik[shape][x?][y?][shape]))
+    //   ]`
+    // will describe exactly the positions that block `i` of shape `shape` is allowed to move to.
+    // This requires linear (in the number of total blocks) amount of computations for
+    // left_nonintersection and right_nonintersection.
+    // I did try to implement this though, and the benchmarks showed it was slower.
+    // Perhaps that's because the current implementation (which loops against each block until
+    // it finds a violation) terminates so early, or it's because my code sucks.
+
     // TODO: This is quite ugly, taking in a reference to the other offsets
     // for _every_ offset. The only reason we do this is to filter out
     // in case of BlockstateJustmoved::nongoal.
