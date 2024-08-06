@@ -1,7 +1,6 @@
 import './style.css'
 import { solve_puzzle, js_get_all } from "sliding-blocks"
-import '@interactjs/actions/drag'
-import interact from '@interactjs/interact' // TODO: Only install the parts you need: https://interactjs.io/docs/installation#npm-streamlined
+import interact from 'interactjs'
 import JSConfetti from 'js-confetti'
 const jsConfetti = new JSConfetti()
 
