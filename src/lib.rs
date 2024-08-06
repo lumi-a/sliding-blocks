@@ -139,13 +139,13 @@ impl tinyset::Fits64 for Offset {
 impl Add for Offset {
     type Output = Self;
     fn add(self, other: Self) -> Self {
-        Self(self.0 + other.0)
+        Self(self.0.wrapping_add(other.0))
     }
 }
 impl Sub for Offset {
     type Output = Self;
     fn sub(self, other: Self) -> Self {
-        Self(self.0 - other.0)
+        Self(self.0.wrapping_sub(other.0))
     }
 }
 
