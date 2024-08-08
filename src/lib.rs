@@ -151,7 +151,7 @@ impl Sub for Offset {
 
 /// A collection of `Offset`s, used for storing
 /// offsets of the same shape in one blockstate.
-type Offsets = VecSet<[Offset; 8]>;
+type Offsets = VecSet<[Offset; 4]>;
 
 /// The blockstates, stored as a tuple:
 /// - A `Vec`, each entry being a collection of non-goal-`Offsets`.
