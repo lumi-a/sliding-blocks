@@ -11,6 +11,25 @@ Written in rust 🦀, the code is in the top-level directory. To accommodate all
 - Call a block a "goal-block" if it appears in the goal-configuration, i.e. it has a goal-position it has to reach for the puzzle to be considered "solved".
 - If there is only one goal-block, we essentially run BFS.
 
+## Optimizations
+- If we have two non-goal-blocks of the same-shape, their positions are interchangable. For instance, these three block-configurations in Ten-Step Solution are equivalent from a puzzle-solving perspective:
+  ```
+    A     A     A 
+  11.   11.   22. 
+  .22.  .33.  .33.
+  .33.  .22.  .44.
+   .44   .44   .11
+   B     B     B  
+  ```
+  Thus, we can reduce the search-space by treating such block-configurations as equivalent. This can _not_ be applied to two goal-blocks of the same shape, or even to a goal-block and a non-goal-block of the same shape.
+- It would take a lot of memory to store the coordinates each block occupies. We wouldn't lose any information if, at the beginning, we stored the shapes of the blocks somewhere, and then represent block-configurations only by the blocks' _offsets_ (relative to, say, the top-left-corner). We could then store the offsets of each block-_shape_ in a set, thus ensuring that two block-configuration that are equivalent (as described above) are treated as equivalent: Because the two sets would be equal.
+- It would also be tedious to calculate whether a block is within-bounds, or intersects another block, by comparing their coordinates for intersection. We'll be running those checks a _lot_, so it'd pay off to pre-compute all the offsets at which a block is in-bounds, and all the offset-pairs for which two blocks intersect. Actually, we need not do that for every pair of blocks, but only for every pair of _shapes_.
+
+Thus, block-states are represented by a vector of goal-block-offsets, and a vector of _sets_ of non-goal-block-offsets, where all the non-goal-block-offsets in a set correspond to blocks of the same shape.
+
+Some smaller optimizations involve choosing clever data-structures and fast hash-functions.
+
+
 ## Tighter ASTAR-heuristics
 If you have any better ideas for ASTAR-heuristics (whether in the single-goal-block or multiple-goal-block case), please share them! Two ideas I had:
 1. For every goal-block B, count how many other blocks it has to cross in order to reach its goal.
