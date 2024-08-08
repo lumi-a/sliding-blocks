@@ -29,6 +29,8 @@ Thus, block-states are represented by a vector of goal-block-offsets, and a vect
 
 Some smaller optimizations involve choosing clever data-structures and fast hash-functions.
 
+TODO: For really difficult puzzles, it might make sense to use something like JIT, together with _arrays_ of goal-block-offsets, and _arrays_ of _sets_ (that are secretly (sorted?) arrays in disguise) of non-goal-block-offsets. This would mean more performance and less memory-use during the algorithm, at the cost of recompilation-time for every puzzle.
+
 
 ## Tighter ASTAR-heuristics
 If you have any better ideas for ASTAR-heuristics (whether in the single-goal-block or multiple-goal-block case), please share them! Two ideas I had:
