@@ -29,7 +29,7 @@ Thus, block-states are represented by a vector of goal-block-offsets, and a vect
 
 Some smaller optimizations involve choosing clever data-structures and fast hash-functions.
 
-TODO: For really difficult puzzles, it might make sense to use something like JIT, together with _arrays_ of goal-block-offsets, and _arrays_ of _sets_ (that are secretly (sorted?) arrays in disguise) of non-goal-block-offsets. This would mean more performance and less memory-use during the algorithm, at the cost of recompilation-time for every puzzle.
+For really difficult puzzles, it might make sense to use something like JIT compilation, together with _arrays_ of goal-block-offsets, and _arrays_ of _sets_ (that are secretly (sorted?) arrays in disguise) of non-goal-block-offsets. This would mean less memory-use and more performance (for instance, on a hard-coded version of the puzzle "The Time Machine", the algorithm ran nearly twice as fast!), at the cost of recompilation-time (maybe 10s or so) for every puzzle. However, JIT compilation means shipping a rust-compiler in WASM, which — if at all possible — would massively inflate app-size, so I won't be implementing this.
 
 
 ## Tighter ASTAR-heuristics
