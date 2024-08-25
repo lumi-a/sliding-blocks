@@ -1,4 +1,6 @@
-//! Solving sliding-block puzzles like the [ones from the](https://layton.fandom.com/wiki/Category:Slide) [Professor Layton games](https://layton.fandom.com/wiki/Category:Sliding)
+//! Solving sliding-block puzzles like the [ones from the](https://layton.fandom.com/wiki/Category:Slide) [Professor Layton games](https://layton.fandom.com/wiki/Category:Sliding).
+//! To solve puzzles, use [`solve_puzzle`] or [`solve_puzzle_minmoves`].
+//! For example-puzzles, see the [`examples`] crate.
 
 #![warn(
     clippy::all,
@@ -1290,6 +1292,32 @@ pub fn solve_puzzle_minmoves(start: &str, goal: &str) -> Result<Option<usize>, S
 ///     where `Path` is a `Vec` of string-representations of boardstates,
 ///     similar to the input-format.
 ///
+/// The representation is a visually intuitive newline-separated string, which makes up
+/// a grid. For instance:
+/// ```txt
+/// abc
+/// c .
+/// ```
+/// would be a grid of width `3` and height `2`.
+/// - Whitespace are cells that are out-of-bounds.
+/// - Periods `.` are cells that are in-bounds, but not occupied by any block.
+/// - Any other character represents a block that is occupying that cell. Such
+///     a cell is automatically in-bounds.
+///
+/// A block is identified by its character, and occupies all the cells that
+/// are occupied by that character. Blocks can consist of multiple grid-cells
+/// (by notation, they always consist of at least one cell). No other topological
+/// assumptions are made -- blocks need not be convex, they need not be
+/// simply connected, and they need not even be connected. For example, the above
+/// puzzle has three distinct blocks (`a` and `b` occupy one cell each, `c` occupies
+/// two cells) and five in-bounds cells, only one of which is not occupied.
+///
+/// The goal-configuration must have the same bounds as the start-configuration. A block
+/// is considered a goal-block if it is present in the goal-configuration. Not every
+/// block needs to be a goal-block. A goal-block must have the same shape in the
+/// goal-configuration as in the start-configuration. See the [`examples`]-crate for
+/// example-puzzles. There may be an arbitrary number of goal-blocks and non-goal-blocks.
+///
 /// # Examples
 /// ```
 /// use sliding_blocks::solve_puzzle;
@@ -1314,11 +1342,7 @@ pub fn solve_puzzle_minmoves(start: &str, goal: &str) -> Result<Option<usize>, S
 /// assert_eq!(computed, Ok(Some(path)));
 /// ```
 /// The shortest path is unique in this example, but this need not always be the case.
-/// Goal-blocks need not be upper-case, non-goal-blocks need not be lower-case. There
-/// may be an arbitrary amount of goal-blocks and non-goal-blocks. Blocks can consist
-/// of multiple grid-cells (by notation, they always consist of at least one cell). No
-/// other topological assumptions are made -- they need not be convex, they need not be
-/// simply connected, and they need not even be connected.
+/// Goal-blocks need not be upper-case, non-goal-blocks need not be lower-case.
 ///
 /// See the [`examples`] crate for more example-puzzles.
 #[inline]
