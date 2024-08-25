@@ -1,16 +1,24 @@
+//! Examples for sliding-block-puzzles.
+
 use core::convert::From;
 use wasm_bindgen::prelude::*;
 
+/// A [`Puzzle`] that can be passed to Javascript.
 #[wasm_bindgen(getter_with_clone)]
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub struct JsPuzzle {
+    /// Name of the puzzle. Irrelevant for solving.
     pub name: String,
+    /// String-representation of start-configuration.
     pub start: String,
+    /// String-representation of goal-configuration.
     pub goal: String,
+    /// The minimum number of moves required to solve the puzzle.
     pub min_moves: usize,
 }
 
+/// A convenience function to get all the `JsPuzzle`s.
 #[wasm_bindgen]
 #[must_use]
 #[inline]
@@ -26,12 +34,18 @@ pub fn js_get_all() -> Vec<JsPuzzle> {
         .collect()
 }
 
+/// A named Puzzle, with a predetermined number of moves
+/// required to solve it.
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub struct Puzzle {
+    /// Puzzle's name. Irrelevant for solving.
     pub name: &'static str,
+    /// String-representation of start-configuration.
     pub start: &'static str,
+    /// String-representation of goal-configuration.
     pub goal: &'static str,
+    /// The minimum number of moves required to solve the puzzle.
     pub min_moves: usize,
 }
 impl From<Puzzle> for JsPuzzle {
@@ -46,6 +60,7 @@ impl From<Puzzle> for JsPuzzle {
     }
 }
 
+/// Example [`Puzzle`]s that have multiple goal-blocks.
 pub const MULTI_GOAL_EXAMPLES: [Puzzle; 9] = [
     Puzzle {
         name: "🎩 Ten-Step Solution",
@@ -235,6 +250,7 @@ pub const MULTI_GOAL_EXAMPLES: [Puzzle; 9] = [
     },
 ];
 
+/// Example [`Puzzle`]s that have one goal-block.
 pub const SINGLE_GOAL_EXAMPLES: [Puzzle; 15] = [
     Puzzle {
         name: "🎩 Cluttered Bag",
@@ -560,6 +576,7 @@ pub const SINGLE_GOAL_EXAMPLES: [Puzzle; 15] = [
     },
 ];
 
+#[cfg(test)]
 mod tests {
 
     #[allow(unused_imports)]
